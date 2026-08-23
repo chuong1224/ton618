@@ -158,10 +158,18 @@ for _m in re.finditer(r"subprocess\.(?:run|Popen)\(", mod):
 check("7b co spawn tien trinh trong module (may gac khong rong)", len(_spans) >= 2, len(_spans))
 _naked = [s.strip()[:60] for s in _spans if "no_window_kwargs()" not in s]
 check("7b moi cho spawn deu truyen no_window_kwargs()", not _naked, _naked)
-ok, why = U.pull_precheck(tempfile.mkdtemp())      # thu muc trong: khong phai repo
-check("7 thu muc khong phai repo thi tu choi", ok is False and why == "not_a_repo", (ok, why))
-res = U.pull(tempfile.mkdtemp())
-check("7 pull() tu choi truoc khi chay git", res.get("ok") is False, res)
+_tmp_prefix = "kb-test-update-"
+with tempfile.TemporaryDirectory(prefix=_tmp_prefix, dir=SCRATCH) as _precheck_tmp:
+    check("7 thu muc tam precheck co prefix", os.path.basename(_precheck_tmp).startswith(_tmp_prefix), _precheck_tmp)
+    ok, why = U.pull_precheck(_precheck_tmp)       # thu muc trong: khong phai repo
+    check("7 thu muc khong phai repo thi tu choi", ok is False and why == "not_a_repo", (ok, why))
+check("7 thu muc tam precheck duoc don", not os.path.exists(_precheck_tmp), _precheck_tmp)
+
+with tempfile.TemporaryDirectory(prefix=_tmp_prefix, dir=SCRATCH) as _pull_tmp:
+    check("7 thu muc tam pull co prefix", os.path.basename(_pull_tmp).startswith(_tmp_prefix), _pull_tmp)
+    res = U.pull(_pull_tmp)
+    check("7 pull() tu choi truoc khi chay git", res.get("ok") is False, res)
+check("7 thu muc tam pull duoc don", not os.path.exists(_pull_tmp), _pull_tmp)
 
 # --- 8: khong tu reload sau khi cap nhat (khong cuop tab dang doc) ---
 check("8 update.js khong tu goi location.reload()", "location.reload()" not in upd_js)
