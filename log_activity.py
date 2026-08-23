@@ -296,13 +296,30 @@ def _rotate_if_big():
 
 
 def read_all_activity_events():
-    """Toàn bộ activity.jsonl — dùng reconcile heat (cùng logic serve.read_all_events)."""
-    act = activity_log_path()
-    if not os.path.exists(act):
-        return []
-    with open(act, "rb") as f:
-        data = f.read().decode("utf-8", errors="replace")
-    return [ev for ev in parse_jsonl(data) if "ts" in ev and "file" in ev]
+    """Log cuộn local + journal vault của chính máy, khử trùng lặp theo event.
+
+    Journal giữ cửa sổ dài hơn log cuộn và vì vậy là mức sàn dương tốt hơn cho
+    store tích luỹ. Local vẫn cần để phủ phần pending vừa flush nhưng OneDrive chưa
+    kịp phản ánh. Không đọc journal máy khác: mỗi store là per-host.
+    """
+    out, seen = [], set()
+    for act in (activity_log_path(), vault_journal_path()):
+        if not os.path.exists(act):
+            continue
+        try:
+            with open(act, "rb") as f:
+                data = f.read().decode("utf-8", errors="replace")
+        except OSError:
+            continue
+        for ev in parse_jsonl(data):
+            if "ts" not in ev or "file" not in ev:
+                continue
+            key = (ev.get("ts"), ev.get("file"), ev.get("type"), ev.get("agent"))
+            if key in seen:
+                continue
+            seen.add(key)
+            out.append(ev)
+    return out
 
 
 def aggregate_by_file(events):
@@ -328,12 +345,66 @@ def aggregate_by_file(events):
     return out
 
 
+COUNT_TYPES = ("read", "search", "edit")
+
+
+def _count(v):
+    return v if isinstance(v, (int, float)) and not isinstance(v, bool) and v > 0 else 0
+
+
+def _pad_key(keys, source, old, fallback):
+    """Chọn ô nhận phần bù khi hai phân hoạch type/agent có tổng khác nhau."""
+    keys = list(keys)
+    if not keys:
+        return fallback
+    order = {k: -i for i, k in enumerate(keys)}
+    return max(keys, key=lambda k: (_count(source.get(k)), _count(old.get(k)), order[k]))
+
+
+def merge_cumulative_floor(old, floor):
+    """Least coherent upper bound của record cũ và mức sàn từ event thật.
+
+    Mỗi count cũ và count ở floor đều là bằng chứng dương nên không ô nào được hạ.
+    Type và agent là hai phân hoạch của cùng tập event; sau khi lấy max từng ô, hai
+    tổng có thể khác nhau vì store chỉ giữ aggregate, không giữ ma trận type×agent.
+    Ta bù phía thấp hơn vào ô có bằng chứng mạnh nhất để đạt tổng nhỏ nhất có thể,
+    thay vì chép đè nguyên record và làm rụng lịch sử đã xoay khỏi log.
+    """
+    old = old if isinstance(old, dict) else {}
+    floor = floor if isinstance(floor, dict) else {}
+    types = {k: max(_count(old.get(k)), _count(floor.get(k))) for k in COUNT_TYPES}
+    old_agents = old.get("agents") if isinstance(old.get("agents"), dict) else {}
+    floor_agents = floor.get("agents") if isinstance(floor.get("agents"), dict) else {}
+    agent_keys = sorted(set(old_agents) | set(floor_agents))
+    agents = {k: max(_count(old_agents.get(k)), _count(floor_agents.get(k)))
+              for k in agent_keys}
+    agents = {k: v for k, v in agents.items() if v > 0}
+
+    type_total, agent_total = sum(types.values()), sum(agents.values())
+    total = max(type_total, agent_total)
+    if type_total < total:
+        key = _pad_key(COUNT_TYPES, floor, old, "read")
+        types[key] += total - type_total
+    if agent_total < total:
+        key = _pad_key(sorted(set(old_agents) | set(floor_agents)),
+                       floor_agents, old_agents, "Claude")
+        agents[key] = agents.get(key, 0) + total - agent_total
+
+    firsts = [v for v in (old.get("first"), floor.get("first"))
+              if isinstance(v, (int, float)) and v > 0]
+    lasts = [v for v in (old.get("last"), floor.get("last"))
+             if isinstance(v, (int, float)) and v > 0]
+    return {"total": total, "read": types["read"], "search": types["search"],
+            "edit": types["edit"], "first": min(firsts) if firsts else 0,
+            "last": max(lasts) if lasts else 0, "agents": agents}
+
+
 def reconcile_cumulative_with_log():
-    """Nâng heat tích lũy máy này nếu thấp hơn activity.jsonl hiện tại.
+    """Nâng heat tích lũy máy này theo log local + journal vault dài hơn.
 
     Mọi dòng trong log cuộn phải đã được _bump_cumulative khi ghi; nếu thiếu (seed,
-    bump lỗi, log trước khi có feature) thì đồng bộ theo log. KHÔNG giảm total
-    khi tích lũy đã cao hơn (lịch sử đã xoay khỏi log).
+    bump lỗi, log trước khi có feature) thì đồng bộ theo nguồn event. KHÔNG giảm
+    bất kỳ count cũ nào: store có thể giữ lịch sử đã xoay khỏi cả hai log.
     """
     # Giữ khoá LOG suốt (flush pending realm mình → rồi mới đọc log): mọi event có
     # mặt trong log-aggregate chắc chắn đã được flush vào store trước đó, nên nhánh
@@ -359,22 +430,10 @@ def reconcile_cumulative_with_log():
         changed = False
         for rel, st in agg.items():
             old = notes.get(rel)
-            old_total = (old.get("total", 0) if isinstance(old, dict) else 0)
-            if st["total"] <= old_total:
-                continue
-            merged = dict(st)
-            if isinstance(old, dict):
-                of, ol = old.get("first"), old.get("last")
-                if isinstance(of, (int, float)) and merged.get("first"):
-                    merged["first"] = min(of, merged["first"])
-                elif isinstance(of, (int, float)):
-                    merged["first"] = of
-                if isinstance(ol, (int, float)) and merged.get("last"):
-                    merged["last"] = max(ol, merged["last"])
-                elif isinstance(ol, (int, float)):
-                    merged["last"] = ol
-            notes[rel] = merged
-            changed = True
+            merged = merge_cumulative_floor(old, st)
+            if merged != old:
+                notes[rel] = merged
+                changed = True
         if changed:
             data.setdefault("since", now)
             data["updated"] = now
