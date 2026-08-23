@@ -197,6 +197,83 @@ def _journal_append(evs):
         pass
 
 
+def normalize_note_key(rel):
+    """Chuẩn hoá khoá heat về relative path .md kiểu vault; trả None nếu không phải note.
+
+    W278: 52/312 khoá trong store của một máy (và 310 dòng journal) không đi qua
+    append_events — plugin Hermes v1 tự ghi nên lọt path backslash Windows
+    ('Work\JXM\Index - JXM.md'), path THƯ MỤC ('Work/JXM', '.') và file ngoài note
+    ('.graph3d/index.html', '~/vault-audit-report.md'). Hậu quả: khoá không match
+    node id nên tàng hình trên UI nhưng vẫn cộng vào tổng heat, và cùng một note bị
+    đếm làm 2 khoá. Đây là bộ lọc CHUNG cho mọi đường vào store (bump, replay
+    journal, aggregate window) — không tin nguồn ghi nào cả.
+    KHÔNG đòi file còn tồn tại: note đã đổi tên/di dời vẫn là lịch sử thật (W277 —
+    không hạ sàn đã có).
+    """
+    if not isinstance(rel, str):
+        return None
+    rel = _demojibake(rel.strip().strip('"').strip("'")).replace("\\", "/")
+    if not rel or rel.startswith("~") or rel.startswith("/"):
+        return None
+    if len(rel) > 1 and rel[1] == ":":        # 'D:/...' — tuyệt đối, không phải khoá store
+        return None
+    if not rel.lower().endswith(".md"):       # thư mục, .html, .py… không bao giờ là note
+        return None
+    parts = [seg for seg in rel.split("/") if seg not in ("", ".")]
+    if not parts or any(seg == ".." for seg in parts):
+        return None
+    if parts[0].startswith("."):              # .graph3d/, .obsidian/… — folder ẩn
+        return None
+    return "/".join(parts)
+
+
+def merge_note_records(a, b):
+    """Cộng hai record heat của CÙNG một note (hai khoá dị dạng gộp về một).
+
+    Cộng chứ không max: bản backslash và bản slash là hai tập event KHÁC nhau của
+    cùng note, max sẽ nuốt mất một nửa. Khác hẳn merge_cumulative_floor (đó là hai
+    ước lượng của cùng tập event nên mới lấy max).
+    """
+    a = a if isinstance(a, dict) else {}
+    b = b if isinstance(b, dict) else {}
+    types = {k: _count(a.get(k)) + _count(b.get(k)) for k in COUNT_TYPES}
+    aa = a.get("agents") if isinstance(a.get("agents"), dict) else {}
+    ba = b.get("agents") if isinstance(b.get("agents"), dict) else {}
+    agents = {k: _count(aa.get(k)) + _count(ba.get(k)) for k in sorted(set(aa) | set(ba))}
+    agents = {k: v for k, v in agents.items() if v > 0}
+    total = max(_count(a.get("total")) + _count(b.get("total")),
+                sum(types.values()), sum(agents.values()))
+    firsts = [v for v in (a.get("first"), b.get("first")) if _count(v)]
+    lasts = [v for v in (a.get("last"), b.get("last")) if _count(v)]
+    return {"total": total, "read": types["read"], "search": types["search"],
+            "edit": types["edit"], "first": min(firsts) if firsts else 0,
+            "last": max(lasts) if lasts else 0, "agents": agents}
+
+
+def repair_cumulative_keys(data):
+    """Gộp khoá dị dạng trong một store đã nạp. Trả (data, báo cáo).
+
+    Ba nhóm: 'merged' (chuẩn hoá xong trùng khoá có sẵn → cộng), 'renamed'
+    (chuẩn hoá xong là khoá mới), 'dropped' (không phải note → bỏ hẳn, kèm số lượt
+    heat oan gỡ ra). Thuần hàm trên dict: gọi được từ test lẫn từ CLI dưới khoá.
+    """
+    notes = data.get("notes")
+    if not isinstance(notes, dict):
+        return data, {"merged": {}, "renamed": {}, "dropped": {}, "heat_dropped": 0}
+    out, rep = {}, {"merged": {}, "renamed": {}, "dropped": {}, "heat_dropped": 0}
+    for rel, rec in notes.items():
+        key = normalize_note_key(rel)
+        if key is None:
+            rep["dropped"][rel] = _count((rec or {}).get("total"))
+            rep["heat_dropped"] += _count((rec or {}).get("total"))
+            continue
+        if key != rel:
+            (rep["merged"] if key in out else rep["renamed"])[rel] = key
+        out[key] = merge_note_records(out[key], rec) if key in out else rec
+    data["notes"] = out
+    return data, rep
+
+
 def _apply_events_to_store(evs, now):
     """Cộng list event (dạng {ts,type,file,agent}) vào store. Gọi DƯỚI khoá store."""
     path = cumulative_heat_path()
@@ -206,7 +283,7 @@ def _apply_events_to_store(evs, now):
     data["updated"] = now
     notes = data.setdefault("notes", {})
     for ev in evs:
-        rel = ev.get("file")
+        rel = normalize_note_key(ev.get("file"))   # W278: chặn khoá dị dạng ngay cửa store
         if not rel:
             continue
         t = ev.get("type")
@@ -326,7 +403,7 @@ def aggregate_by_file(events):
     """Gom metric heat theo đường dẫn note (relative vault path)."""
     out = {}
     for e in events:
-        f = e.get("file")
+        f = normalize_note_key(e.get("file"))      # W278: journal cũ còn path backslash/thư mục
         if not f:
             continue
         ts = float(e.get("ts") or 0)
@@ -443,6 +520,37 @@ def reconcile_cumulative_with_log():
     # Dưới khoá store: reconcile (server) và _bump_cumulative (hook) không còn
     # đọc-ghi đè lên nhau (lost-update — review P1.2).
     return _cum_locked(work)
+
+
+def repair_all_stores(dry_run=False):
+    """Vá MỌI heat_cumulative-<HOST>.json trong vault (W278). Trả list (path, báo cáo).
+
+    Ghi có backup .bak-w278-<ts> và đi qua _save_cumulative (tmp per-process +
+    os.replace) nên reader không bao giờ thấy file dở dang.
+    """
+    from activity_paths import cumulative_heat_files
+    out = []
+    for path in cumulative_heat_files():
+        data = _load_cumulative(path)
+        if not data:
+            continue
+        before = len(data.get("notes") or {})
+        data, rep = repair_cumulative_keys(data)
+        rep["before"] = before
+        rep["after"] = len(data.get("notes") or {})
+        out.append((path, rep))
+        touched = rep["merged"] or rep["renamed"] or rep["dropped"]
+        if touched and not dry_run:
+            try:
+                import shutil
+                shutil.copy2(path, "%s.bak-w278-%d" % (path, int(time.time())))
+            except OSError:
+                pass
+            data["key_repair"] = ("W278 · chuẩn hoá %d khoá dị dạng, gỡ %d lượt heat oan"
+                                  % (len(rep["merged"]) + len(rep["renamed"]) + len(rep["dropped"]),
+                                     rep["heat_dropped"]))
+            _save_cumulative(path, data)
+    return out
 
 
 def resolve_agent(explicit=None):
@@ -593,6 +701,18 @@ if __name__ == "__main__":
         except Exception:
             pass
         args = sys.argv[1:]
+        if args[0] in ("sua-khoa", "repair-keys"):        # W278
+            dry = "--thu" in args or "--dry-run" in args
+            for path, rep in repair_all_stores(dry_run=dry):
+                print("%s: %d -> %d khoa | gop %d | doi ten %d | bo %d (%d luot heat oan)%s"
+                      % (os.path.basename(path), rep["before"], rep["after"],
+                         len(rep["merged"]), len(rep["renamed"]), len(rep["dropped"]),
+                         rep["heat_dropped"], "  [THU]" if dry else ""))
+                for bad, good in sorted(rep["merged"].items()) + sorted(rep["renamed"].items()):
+                    print("    %s  ->  %s" % (bad, good))
+                for bad, n in sorted(rep["dropped"].items()):
+                    print("    BO  %s  (%d luot)" % (bad, n))
+            sys.exit(0)
         agent = None
         if "--agent" in args:
             i = args.index("--agent")

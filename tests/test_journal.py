@@ -127,6 +127,80 @@ check("J7b cursor khong tro vao journal", all("activity-" not in os.path.basenam
 gi = open(os.path.join(G3D, ".gitignore"), encoding="utf-8").read()
 check("J8 .gitignore co activity-*.jsonl", "activity-*.jsonl" in gi)
 
+# ---- J9: chuan hoa khoa heat (W278) — plugin Hermes v1 ghi thang, lot path la ----
+BS = chr(92)                                    # backslash — dung heredoc de nguyen
+check("J9a backslash Windows -> slash vault",
+      LA.normalize_note_key("Work" + BS + "JXM" + BS + "Index - JXM.md") == "Work/JXM/Index - JXM.md")
+check("J9b thu muc (khong .md) bi loai", LA.normalize_note_key("Work" + BS + "JXM") is None)
+check("J9c '.' bi loai", LA.normalize_note_key(".") is None)
+check("J9d file ngoai note bi loai", LA.normalize_note_key(".graph3d/index.html") is None)
+check("J9e folder an bi loai", LA.normalize_note_key(".graph3d/notes/A.md") is None)
+check("J9f path tuyet doi/~ bi loai",
+      LA.normalize_note_key("~/vault-audit-report.md") is None
+      and LA.normalize_note_key("D:/vault/A.md") is None
+      and LA.normalize_note_key("/tmp/A.md") is None)
+check("J9g note da doi ten VAN giu (khong doi ton tai tren dia)",
+      LA.normalize_note_key("Cu/Da Doi Ten.md") == "Cu/Da Doi Ten.md")
+check("J9h './' va segment rong duoc rut gon",
+      LA.normalize_note_key("./Work//JXM/A.md") == "Work/JXM/A.md")
+
+r = LA.merge_note_records({"total": 3, "read": 3, "search": 0, "edit": 0, "first": 10,
+                           "last": 20, "agents": {"Hermes": 3}},
+                          {"total": 2, "read": 1, "search": 1, "edit": 0, "first": 5,
+                           "last": 15, "agents": {"Hermes": 1, "Claude": 1}})
+check("J9i gop 2 khoa cua cung note thi CONG chu khong max",
+      (r["total"], r["read"], r["search"], r["agents"]) == (5, 4, 1, {"Claude": 1, "Hermes": 3 + 1}), r)
+check("J9j gop giu first nho nhat / last lon nhat", (r["first"], r["last"]) == (5, 20), r)
+
+store = {"notes": {
+    "Work/JXM/Index - JXM.md": {"total": 2, "read": 2, "search": 0, "edit": 0,
+                                "first": 9, "last": 9, "agents": {"Claude": 2}},
+    "Work" + BS + "JXM" + BS + "Index - JXM.md": {"total": 3, "read": 3, "search": 0, "edit": 0,
+                                                  "first": 1, "last": 4, "agents": {"Hermes": 3}},
+    "Work" + BS + "JXM" + BS + "Rieng.md": {"total": 1, "read": 1, "search": 0, "edit": 0,
+                                            "first": 2, "last": 2, "agents": {"Hermes": 1}},
+    "Work" + BS + "JXM": {"total": 46, "read": 46, "search": 0, "edit": 0,
+                          "first": 1, "last": 2, "agents": {"Hermes": 46}}}}
+fixed, rep = LA.repair_cumulative_keys(store)
+check("J9k khoa backslash gop vao ban slash co san",
+      fixed["notes"]["Work/JXM/Index - JXM.md"]["total"] == 5,
+      fixed["notes"]["Work/JXM/Index - JXM.md"])
+check("J9l khoa backslash khong trung thi doi ten, khong mat luot",
+      fixed["notes"].get("Work/JXM/Rieng.md", {}).get("total") == 1, list(fixed["notes"]))
+check("J9m khoa thu muc bi bo va bao cao dung so luot oan",
+      rep["heat_dropped"] == 46 and len(fixed["notes"]) == 2, (rep, list(fixed["notes"])))
+check("J9n bao cao tach 3 nhom merged/renamed/dropped",
+      (len(rep["merged"]), len(rep["renamed"]), len(rep["dropped"])) == (1, 1, 1), rep)
+fixed2, rep2 = LA.repair_cumulative_keys(json.loads(json.dumps(fixed)))
+check("J9o va lai lan 2 la no-op (idempotent)",
+      fixed2["notes"] == fixed["notes"] and rep2["heat_dropped"] == 0, rep2)
+
+# cua vao store: event co path la KHONG bao gio tao khoa moi.
+# GRAPH3D_HEAT_DIR tro vao scratch — tuyet doi khong dung store that cua may.
+HDIR = os.path.join(SCRATCH, "heat_w278")
+os.makedirs(HDIR, exist_ok=True)
+os.environ["GRAPH3D_HEAT_DIR"] = HDIR
+check("J9p0 store test nam trong scratch, khong phai .graph3d that",
+      os.path.dirname(AP.cumulative_heat_path()) == os.path.normpath(HDIR),
+      AP.cumulative_heat_path())
+try:
+    os.remove(AP.cumulative_heat_path())
+except OSError:
+    pass
+now9 = time.time()
+LA._apply_events_to_store([ev(now9, "Work" + BS + "JXM" + BS + "Index - JXM.md"),
+                           ev(now9, "Work" + BS + "JXM"),
+                           ev(now9, ".graph3d/index.html")], now9)
+cum = json.load(open(AP.cumulative_heat_path(), encoding="utf-8"))
+bad9 = [k for k in cum.get("notes", {}) if BS in k or not k.lower().endswith(".md")]
+check("J9p _apply_events_to_store chuan hoa/loai bo, store khong con khoa di dang",
+      bad9 == [] and "Work/JXM/Index - JXM.md" in cum["notes"], (bad9, list(cum.get("notes", {}))))
+agg9 = LA.aggregate_by_file([ev(now9, "Work" + BS + "JXM" + BS + "A.md"), ev(now9, "Work" + BS + "JXM")])
+check("J9q aggregate_by_file (heat window + reconcile) cung chuan hoa",
+      list(agg9) == ["Work/JXM/A.md"], list(agg9))
+del os.environ["GRAPH3D_HEAT_DIR"]
+shutil.rmtree(HDIR, ignore_errors=True)
+
 shutil.rmtree(JDIR, ignore_errors=True)
 for f in (LOG, LOG + ".lock"):
     try: os.remove(f)
