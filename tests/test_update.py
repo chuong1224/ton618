@@ -226,5 +226,20 @@ fx = re.search(r"window\.__fx\s*=\s*\{(.*?)\};", main_js, re.S)
 check("13 openUpdate/pollUpdate co trong __fx (nghiem thu tab an)",
       bool(fx) and "openUpdate" in fx.group(1) and "pollUpdate" in fx.group(1))
 
+# TON618: legacy origin remains on the verified canonical channel; forks stay independent.
+_original_git = U._git
+try:
+    for origin in ("https://github.com/chuong1224/agents-knowledge-base.git",
+                   "git@github.com:chuong1224/agents-knowledge-base.git"):
+        U._git = lambda *a, **k: origin
+        check("TON618 legacy channel alias " + origin, U.repo_slug() == U.CANONICAL_REPO)
+    U._git = lambda *a, **k: "https://github.com/another/fork.git"
+    check("TON618 preserves fork channel", U.repo_slug() == "another/fork")
+finally:
+    U._git = _original_git
+check("TON618 preserves consent and state location for downgrade",
+      U.state_path() == os.path.join(activity_paths.local_data_dir(), "update_check.json")
+      and os.path.basename(activity_paths.local_data_dir()) == "claude-graph3d")
+
 print("\nTONG KET test_update: %s" % (("FAIL %d: %s" % (len(fails), ", ".join(fails))) if fails else "ALL PASS"))
 sys.exit(1 if fails else 0)

@@ -386,6 +386,22 @@ def test_pwa_app_id():
                                     "--app-id=abcdefghijklmnop"], calls)
 
 
+def test_ton618_compatibility():
+    old = {"Name": "KB Graph 3D — Knowledge Base", "AppID": "Old.Package!App"}
+    new = {"Name": "TON618 — Knowledge Base", "AppID": "New.Package!App"}
+    check("TON618: old packaged identity remains usable",
+          ENS.packaged_app_spec([old])["app_id"] == old["AppID"])
+    check("TON618: new packaged identity wins independent of ordering",
+          all(ENS.packaged_app_spec(rows)["app_id"] == new["AppID"]
+              for rows in ([old, new], [new, old])))
+    check("TON618: old and new names accepted, unrelated name rejected",
+          ENS.app_name_matches("KB Graph 3D") and ENS.app_name_matches("TON618")
+          and not ENS.app_name_matches("Other App"))
+    spec = IL.shortcut_spec(python=sys.executable)
+    check("TON618: shortcut keeps old physical entry point",
+          IL.APP_NAME == "TON618" and "ensure_graph3d.py" in spec["args"])
+
+
 if __name__ == "__main__":
     if os.name != "nt":
         print("[SKIP] test_launcher — TOAN BO bo test (shortcut .lnk chi co tren Windows)")
@@ -400,6 +416,7 @@ if __name__ == "__main__":
     test_refresh_shell()
     test_ensure_app()
     test_pwa_app_id()
+    test_ton618_compatibility()
     print("\nTONG KET test_launcher: %s" % (("FAIL %d: %s" % (len(fails), ", ".join(fails)))
                                             if fails else "ALL PASS"))
     sys.exit(1 if fails else 0)

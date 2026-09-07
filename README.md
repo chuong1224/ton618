@@ -1,8 +1,10 @@
-# Agents Knowledge Base
+# TON618
+
+Formerly Agents Knowledge Base / KB Graph 3D. The 3D graph remains a view inside TON618. See [upgrade and rollback](docs/migration-v2.md). Existing screenshots show the previous branding.
 
 **A 3D cockpit for your markdown knowledge vault — and a live window into the AI agents working inside it.**
 
-**🌐 Landing page: [chuong1224.github.io/agents-knowledge-base](https://chuong1224.github.io/agents-knowledge-base/)**
+**🌐 Landing page: [chuong1224.github.io/ton618](https://chuong1224.github.io/ton618/)**
 
 Point it at a folder of markdown notes (an Obsidian-style vault) and it serves a local web app: an interactive, synthwave-styled 3D force graph of every note, tag and attachment — with a built-in reader, full-text finder, tabbed workspace, and a layer no PKM tool has: **real-time visualization, replay and analytics of AI-agent activity** (Claude Code out of the box; any agent via a simple JSONL hook).
 
@@ -92,8 +94,8 @@ Requirements: **Python 3.9+** and a modern browser. `PyYAML` is optional for the
 ### 🚀 Try it in 60 seconds — no vault needed
 
 ```bash
-git clone https://github.com/chuong1224/agents-knowledge-base
-cd agents-knowledge-base
+git clone https://github.com/chuong1224/ton618
+cd ton618
 python try_demo.py
 ```
 
@@ -105,7 +107,7 @@ That runs the cockpit on the **bundled 120-note demo vault** — the same one ev
 # clone INTO your vault as a dot-folder (keeps it invisible to your note tools)
 # ⚠ replace "path/to/YourVault" with the real path to YOUR vault — the folder
 #   that holds your markdown notes, e.g. "D:/Notes" or ~/Documents/Vault
-git clone https://github.com/chuong1224/agents-knowledge-base "path/to/YourVault/.graph3d"
+git clone https://github.com/chuong1224/ton618 "path/to/YourVault/.graph3d"
 cd "path/to/YourVault/.graph3d"
 python ensure_graph3d.py
 ```
@@ -147,7 +149,7 @@ Or lay it out by hand:
 ```bash
 # copy the starter vault anywhere you like, then install the app into it
 cp -r starter-vault "path/to/MyVault"
-git clone https://github.com/chuong1224/agents-knowledge-base "path/to/MyVault/.graph3d"
+git clone https://github.com/chuong1224/ton618 "path/to/MyVault/.graph3d"
 cd "path/to/MyVault/.graph3d"
 python ensure_graph3d.py
 ```

@@ -14,6 +14,11 @@ from datetime import datetime
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 
+# TON618 v2: đổi thương hiệu, giữ identity dữ liệu để nâng/hạ phiên bản không mất state.
+APP_NAME = "TON618"
+APP_TITLE = "TON618 — Knowledge Base"
+APP_TITLE_ALIASES = ("TON618", "KB Graph 3D")
+
 
 def parse_jsonl(text):
     """Các dòng JSONL → list dict (dòng hỏng/dở bỏ qua). Bộ parse DUY NHẤT dùng chung
@@ -417,7 +422,7 @@ APP_PY = ("activity_paths.py", "build_graph_data.py", "ensure_graph3d.py",
           "insight.py", "install_launcher.py", "integrity.py", "log_activity.py",
           "onboarding.py", "run_graph3d.py", "serve.py", "update_check.py",
           "vault_switcher.py")
-APP_TOP = APP_PY + ("index.html", "Start-Graph3D.bat")
+APP_TOP = APP_PY + ("index.html", "Start-Graph3D.bat", "Start-TON618.bat")
 APP_DIRS = ("src", "vendor")
 
 # Các file mà khi đổi thì SERVER phải khởi động lại (build_graph_data.py auto-reload

@@ -34,7 +34,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 from activity_paths import local_data_dir, no_window_kwargs   # noqa: E402
 
-APP_NAME = "KB Graph 3D"
+from activity_paths import APP_NAME
 ENSURE = "ensure_graph3d.py"
 
 # Truyền tham số cho PowerShell bằng BIẾN MÔI TRƯỜNG, không nội suy vào chuỗi lệnh:
@@ -570,7 +570,7 @@ def main():
         print("install_launcher.py: %s" % exc)
         return 2
 
-    print("KB Graph 3D: da tao shortcut")
+    print("TON618: da tao shortcut")
     for label, p in res["paths"]:
         print("  + %s: %s" % (label, p))
     print("  chay: %s %s" % (res["spec"]["target"], res["spec"]["args"]))

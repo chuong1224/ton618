@@ -43,8 +43,12 @@ import run_graph3d as sup                    # noqa: E402  (health/port_pid/kill
 import install_launcher as launcher          # noqa: E402  (doc/scan shortcut PWA Windows)
 import vault_switcher                         # noqa: E402  (W180 — chọn vault root)
 
-APP_TITLE_PREFIX = "KB Graph 3D"
-APP_TITLE = "KB Graph 3D — Knowledge Base"
+from activity_paths import APP_NAME, APP_TITLE, APP_TITLE_ALIASES
+APP_TITLE_PREFIX = APP_NAME
+
+
+def app_name_matches(name):
+    return any(name.casefold().startswith(alias.casefold()) for alias in APP_TITLE_ALIASES)
 
 _PS_START_APPS = r"""
 $ErrorActionPreference = 'Stop'
@@ -116,7 +120,8 @@ def installed_app_candidates():
     đổi tên app, ``GRAPH3D_PWA_SHORTCUT`` là đường chỉ định tường minh.
     """
     out = []
-    explicit = os.environ.get("GRAPH3D_PWA_SHORTCUT", "").strip()
+    explicit = (os.environ.get("TON618_PWA_SHORTCUT") or
+                os.environ.get("GRAPH3D_PWA_SHORTCUT", "")).strip()
     if explicit:
         out.append(os.path.normpath(explicit))
     try:
@@ -130,7 +135,7 @@ def installed_app_candidates():
             for base, _dirs, files in os.walk(root):
                 for name in files:
                     if (name.lower().endswith(".lnk")
-                            and name[:-4].casefold().startswith(APP_TITLE_PREFIX.casefold())):
+                            and app_name_matches(name[:-4])):
                         out.append(os.path.normpath(os.path.join(base, name)))
         except OSError:
             continue
@@ -172,7 +177,7 @@ def packaged_app_spec(rows):
         name = str(row.get("Name") or row.get("name") or "").strip()
         app_id = str(row.get("AppID") or row.get("AppId")
                      or row.get("app_id") or "").strip()
-        if (not name.casefold().startswith(APP_TITLE_PREFIX.casefold())
+        if (not app_name_matches(name)
                 or not re.fullmatch(r"[a-z0-9._{}-]+![a-z0-9._{}-]+", app_id, re.I)):
             continue
         rank = 0 if name.casefold() == APP_TITLE.casefold() else 1

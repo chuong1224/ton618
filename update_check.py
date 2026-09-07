@@ -43,7 +43,8 @@ from activity_paths import (app_version, local_data_dir,   # noqa: E402
 
 # Repo gốc — chỉ dùng khi bản cài KHÔNG phải một clone (ví dụ working tree private của
 # người bảo trì, vốn có git dir riêng và không có remote nào).
-CANONICAL_REPO = "chuong1224/agents-knowledge-base"
+CANONICAL_REPO = "chuong1224/ton618"
+LEGACY_REPO = "chuong1224/agents-knowledge-base"
 API = "https://api.github.com"
 TTL = 24 * 3600          # tối đa 1 lượt kiểm/ngày (xem ràng buộc 2)
 TIMEOUT = 6              # giây; thà bỏ lượt kiểm còn hơn treo request của UI
@@ -105,7 +106,7 @@ def repo_slug(here=HERE):
             if slug.endswith(".git"):
                 slug = slug[:-4]
             if slug.count("/") == 1 and all(slug.split("/")):
-                return slug
+                return CANONICAL_REPO if slug.casefold() == LEGACY_REPO.casefold() else slug
     return CANONICAL_REPO
 
 
@@ -119,8 +120,9 @@ def _api(path):
         # User-Agent đi kèm MỌI request ra ngoài nên nó là nội dung công khai: đừng
         # nhét tên repo private vào đây. Bản đầu ghi tên repo private và bị denylist
         # của publish chặn thẳng — đúng vai trò của nó, và đúng lúc.
-        "User-Agent": "graph3d-update-check"})
-    token = os.environ.get("GRAPH3D_GITHUB_TOKEN", "").strip()
+        "User-Agent": "ton618-update-check"})
+    token = (os.environ.get("TON618_GITHUB_TOKEN") or
+             os.environ.get("GRAPH3D_GITHUB_TOKEN", "")).strip()
     if token:
         req.add_header("Authorization", "Bearer " + token)
     try:

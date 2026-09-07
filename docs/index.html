@@ -3,11 +3,11 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Agents Knowledge Base — a 3D cockpit for your markdown vault</title>
+<title>TON618 — a 3D cockpit for your markdown vault</title>
 <meta name="description" content="Turn a markdown vault into a synthwave 3D cockpit and watch AI agents work inside it — live effects, replay, analytics. Zero dependencies, no build step.">
-<meta property="og:title" content="Agents Knowledge Base">
+<meta property="og:title" content="TON618">
 <meta property="og:description" content="A 3D cockpit for your markdown vault — and a live window into the AI agents working inside it.">
-<meta property="og:image" content="https://chuong1224.github.io/agents-knowledge-base/hero.png">
+<meta property="og:image" content="https://chuong1224.github.io/ton618/hero.png">
 <meta property="og:type" content="website">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌌</text></svg>">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -132,8 +132,8 @@
 <div class="nebula n1"></div><div class="nebula n2"></div><div class="nebula n3"></div>
 
 <nav>
-  <span class="logo">AGENTS KNOWLEDGE BASE</span>
-  <a class="gh" href="https://github.com/chuong1224/agents-knowledge-base">GitHub ↗</a>
+  <span class="logo">TON618</span>
+  <a class="gh" href="https://github.com/chuong1224/ton618">GitHub ↗</a>
 </nav>
 
 <main>
@@ -155,13 +155,13 @@
         <button class="copy" id="copyInstall" aria-label="Copy install commands">copy install</button>
       </div>
       <pre id="cli"><span class="cm"># just looking? run the built-in 120-note demo — no vault needed:</span>
-<span class="p">$</span> <span class="c">git clone https://github.com/chuong1224/agents-knowledge-base</span>
-<span class="p">$</span> <span class="c">cd agents-knowledge-base</span>
+<span class="p">$</span> <span class="c">git clone https://github.com/chuong1224/ton618</span>
+<span class="p">$</span> <span class="c">cd ton618</span>
 <span class="p">$</span> <span class="c">python try_demo.py</span>
 
 <span class="cm"># install into YOUR vault — ⚠ replace <span class="v">YourVault</span> with the path to your folder</span>
 <span class="cm">#   of markdown notes (no vault yet? see "start from zero" below)</span>
-<span class="p">$</span> <span class="c">git clone https://github.com/chuong1224/agents-knowledge-base "<span class="v">YourVault</span>/.graph3d"</span>
+<span class="p">$</span> <span class="c">git clone https://github.com/chuong1224/ton618 "<span class="v">YourVault</span>/.graph3d"</span>
 <span class="p">$</span> <span class="c">cd "<span class="v">YourVault</span>/.graph3d"</span>
 <span class="p">$</span> <span class="c">python ensure_graph3d.py</span></pre>
     </div>
@@ -197,7 +197,7 @@
     <p class="secsub">The secret: a vault is just a folder of markdown files. No Obsidian required, no account, nothing to import.</p>
     <div class="grid">
       <div class="card"><div class="ico">🎮</div><h3>1 · Feel it first</h3><p><code>python try_demo.py</code> opens the 120-note demo galaxy — the one in every shot on this page. Zero setup.</p></div>
-      <div class="card"><div class="ico">🌱</div><h3>2 · Grow your own</h3><p>Copy the repo's <a href="https://github.com/chuong1224/agents-knowledge-base/tree/main/starter-vault" style="color:var(--cyan)">starter-vault</a> — 9 guided notes that teach notes, [[wikilinks]], tags and hubs by being read inside the app. Vietnamese summary included.</p></div>
+      <div class="card"><div class="ico">🌱</div><h3>2 · Grow your own</h3><p>Copy the repo's <a href="https://github.com/chuong1224/ton618/tree/main/starter-vault" style="color:var(--cyan)">starter-vault</a> — 9 guided notes that teach notes, [[wikilinks]], tags and hubs by being read inside the app. Vietnamese summary included.</p></div>
       <div class="card"><div class="ico">🧭</div><h3>3 · Obsidian later, if ever</h3><p>Any text editor works — Notepad included, AI agents too. Obsidian is a great editor to adopt when you write daily; it opens the exact same folder.</p></div>
     </div>
   </section>
@@ -245,16 +245,16 @@
 
 <footer>
   <span>MIT © 2026 Chuong Phan</span>
-  <span><a href="https://github.com/chuong1224/agents-knowledge-base">Source on GitHub</a> · built with an AI pair-programmer, logged on its own graph 🌌</span>
+  <span><a href="https://github.com/chuong1224/ton618">Source on GitHub</a> · built with an AI pair-programmer, logged on its own graph 🌌</span>
 </footer>
 
 <script>
   // copy CLI — 2 đường: demo và install
   const CMDS = {
-    copyDemo: ['git clone https://github.com/chuong1224/agents-knowledge-base',
-               'cd agents-knowledge-base',
+    copyDemo: ['git clone https://github.com/chuong1224/ton618',
+               'cd ton618',
                'python try_demo.py'],
-    copyInstall: ['git clone https://github.com/chuong1224/agents-knowledge-base "YourVault/.graph3d"',
+    copyInstall: ['git clone https://github.com/chuong1224/ton618 "YourVault/.graph3d"',
                   'cd "YourVault/.graph3d"',
                   'python ensure_graph3d.py'],
   };

@@ -1,7 +1,7 @@
 @echo off
 rem KB Graph 3D — double-click de mo graph 3D cua Knowledge Base
 cd /d "%~dp0"
-title KB Graph 3D
+title TON618
 if not defined LOCALAPPDATA set "LOCALAPPDATA=%USERPROFILE%\AppData\Local"
 rem KHONG set GRAPH3D_ACTIVITY_FILE o day! Env nay la OVERRIDE tuong minh: set no lam
 rem activity_log_candidates() chi doc dung 1 duong, MAT kha nang doc log Cowork (MSIX LocalCache).
