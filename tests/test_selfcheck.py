@@ -248,6 +248,38 @@ check("G11 moc vung phu nam NGOAI cay .graph3d",
 check("G12 moc tach theo (thu muc, che do) — private/public/--slow khong dam nhau",
       SC.moc_key(False) != SC.moc_key(True) and SC.G3D.lower() in SC.moc_key(False).lower())
 
+# W354: exercise the real lock, in a fresh interpreter without inherited overrides.
+# Refuse an unsafe path BEFORE opening it, so the failing regression is read-only
+# with respect to the real repository/runtime store.
+heat_probe = r'''
+import os, sys
+sys.dont_write_bytecode = True
+sys.path.insert(0, sys.argv[1])
+from _scratch import SCRATCH, G3D
+sys.path.insert(0, G3D)
+import activity_paths as ap
+import log_activity as la
+expected = os.environ.get("W354_EXPECT_HEAT", SCRATCH)
+assert os.path.normcase(os.path.dirname(ap.cumulative_heat_path())) == os.path.normcase(expected)
+lock = ap.cumulative_heat_path() + ".lock"
+called = []
+la._cum_locked(lambda: called.append(True))
+assert called == [True] and os.path.isfile(lock)
+print("isolated heat lock")
+'''
+for label, override in (("default", None), ("explicit", os.path.join(SCRATCH, "heat-override"))):
+    env = dict(os.environ, PYTHONDONTWRITEBYTECODE="1", PYTHONIOENCODING="utf-8")
+    env.pop("GRAPH3D_HEAT_DIR", None)
+    env.pop("W354_EXPECT_HEAT", None)
+    if override:
+        os.makedirs(override, exist_ok=True)
+        env.update(GRAPH3D_HEAT_DIR=override, W354_EXPECT_HEAT=override)
+    probe = subprocess.run([sys.executable, "-c", heat_probe, SC.TESTS], env=env,
+                           capture_output=True, encoding="utf-8", errors="replace", timeout=30)
+    check("H heat lock isolated: " + label,
+          probe.returncode == 0 and "isolated heat lock" in probe.stdout,
+          (probe.stdout or "") + (probe.stderr or ""))
+
 print("\nTONG KET test_selfcheck: %s" % (
     ("FAIL %d: %s" % (len(fails), ", ".join(fails))) if fails else "ALL PASS"))
 sys.exit(1 if fails else 0)

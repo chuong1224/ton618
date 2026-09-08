@@ -21,3 +21,7 @@ VAULT = os.path.dirname(G3D)
 # truoc khi test import log_activity/serve. Test nao can dir rieng thi tu set env
 # TRUOC khi import _scratch (setdefault khong de len).
 os.environ.setdefault("GRAPH3D_JOURNAL_DIR", SCRATCH)
+
+# Heat reconciliation opens a lock even with no pending events (W354).
+# Isolate it before importing serve/log_activity, including standalone tests.
+os.environ.setdefault("GRAPH3D_HEAT_DIR", SCRATCH)

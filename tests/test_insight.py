@@ -409,15 +409,22 @@ os.environ.pop("GRAPH3D_INSIGHT_REPORT", None)
 os.remove(RP)
 
 # ---- serve: nguon first/last cho chi so "nguoi" + endpoint ----
+# W354: store rieng de do first/last ca tren clone rong, khong doc heat that.
+heat_fixture = os.path.join(SCRATCH, "insight-heat")
+os.makedirs(heat_fixture, exist_ok=True)
+os.environ["GRAPH3D_HEAT_DIR"] = heat_fixture
+with open(os.path.join(heat_fixture, "heat_cumulative-FIXTURE.json"), "w", encoding="utf-8") as f:
+    json.dump({"host": "FIXTURE", "since": NOW - 10, "updated": NOW,
+               "notes": {"Fixture.md": {"total": 1, "read": 1, "search": 0,
+                         "edit": 0, "first": NOW - 10, "last": NOW, "agents": {"Test": 1}}}}, f)
 import serve as SV
 check("V serve co merge_cumulative_stores", hasattr(SV, "merge_cumulative_stores"))
 merged, hmeta = SV.merge_cumulative_stores()
 check("V merge tra (notes, meta) dung hinh",
       isinstance(merged, dict) and set(hmeta) == {"machines", "since", "updated"}, hmeta)
-if merged:
-    row = next(iter(merged.values()))
-    check("V moi note trong store co first/last (nguon chi so nguoi)",
-          "first" in row and "last" in row, row)
+row = merged.get("Fixture.md", {})
+check("V moi note trong store co first/last (nguon chi so nguoi)",
+      row.get("first") == NOW - 10 and row.get("last") == NOW, row)
 check("V /heat scope=all giu nguyen contract cu",
       set(SV.build_heat_cumulative(top_n=1)) >= {"scope", "counts", "max", "total",
                                                  "distinct", "machines", "since",
