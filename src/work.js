@@ -1,8 +1,8 @@
 /* work.js — Work Map: cây rẽ nhánh việc đang mở (/work).
    Nguồn chân lý + luật phân loại nằm trong vault (Vault Operation/Work Map);
    module này CHỈ vẽ — không tự suy diễn thứ tự, không hard-code danh sách việc.
-   Bố cục: mỗi nhóm một băng ngang, trong băng cột = độ sâu phụ thuộc (lá trái →
-   gốc phải). Node là HTML (CSS lo wrap/scroll), mũi tên vẽ bằng SVG SAU khi
+   Bố cục: mỗi nhóm đọc từ trên xuống, chỉ vẽ các tầng còn việc đang hiển thị.
+   Node là HTML (CSS lo wrap/scroll), mũi tên vẽ bằng SVG SAU khi
    layout xong — đo bằng getBoundingClientRect nên phải chờ 1 khung hình. */
 import { $, esc, byId, focusInto, restoreFocus } from './state.js';
 import { tr } from './i18n.js';
@@ -67,13 +67,15 @@ function render() {
     `<span class="b-waiting_gate">${c.waiting_gate || 0} ${tr('work.blocked')}</span> · ` +
     `${c.closed || 0} ${tr('work.closed')} · 🖥 ${esc(DB.host || '')}`;
 
-  const maxLayer = shown.reduce((m, d) => Math.max(m, d.layer || 0), 0);
   let html = '';
   for (const g of DB.groups) {
     const mine = shown.filter(d => d.group === g.id);
     if (!mine.length) continue;
     html += `<div class="wm-band"><div class="wm-bh">${esc(g.title)}</div><div class="wm-cols">`;
-    for (let L = 0; L <= maxLayer; L++) {
+    // Closed ancestors may give the first visible task a high layer. Never
+    // reserve blank space for hidden tasks, including in the ready-only view.
+    const layers = [...new Set(mine.map(d => d.layer || 0))].sort((a, b) => a - b);
+    for (const L of layers) {
       const col = mine.filter(d => (d.layer || 0) === L);
       html += `<div class="wm-col">${col.map(nodeHtml).join('')}</div>`;
     }
@@ -106,8 +108,9 @@ function drawEdges() {
   wrap.querySelectorAll('.wm-node').forEach(el => {
     const r = el.getBoundingClientRect();
     pos.set(el.dataset.id, {
-      x1: r.left - base.left + wrap.scrollLeft, x2: r.right - base.left + wrap.scrollLeft,
-      y: r.top - base.top + wrap.scrollTop + r.height / 2,
+      x: r.left - base.left + wrap.scrollLeft + r.width / 2,
+      y1: r.top - base.top + wrap.scrollTop,
+      y2: r.bottom - base.top + wrap.scrollTop,
     });
   });
   const paths = [];
@@ -117,11 +120,16 @@ function drawEdges() {
     for (const dep of d.depends || []) {
       const from = pos.get(dep);
       if (!from) continue;
-      const mx = (from.x2 + to.x1) / 2;
-      paths.push(`<path d="M${from.x2} ${from.y} C${mx} ${from.y} ${mx} ${to.y} ${to.x1} ${to.y}"/>`);
+      const my = (from.y2 + to.y1) / 2;
+      paths.push(`<path d="M${from.x} ${from.y2} C${from.x} ${my} ${to.x} ${my} ${to.x} ${to.y1}"/>`);
     }
   }
-  svg.setAttribute('width', wrap.scrollWidth);
+  // Reset old SVG dimensions before measuring: a previous wide/tall layout
+  // must not keep its own scroll extent alive after resize or filtering.
+  svg.innerHTML = '';
+  svg.setAttribute('width', '0');
+  svg.setAttribute('height', '0');
+  svg.setAttribute('width', wrap.clientWidth);
   svg.setAttribute('height', wrap.scrollHeight);
   svg.innerHTML =
     '<defs><marker id="wm-ar" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto">' +

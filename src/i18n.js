@@ -181,7 +181,7 @@ export const DICT = {
     'work.h2': '🌳 Work Map',
     'work.loading': 'đang đọc…',
     'work.open': '🌳 Mở bản đồ',
-    'work.open.tip': 'Bản đồ mọi việc đang mở — lá trái, việc phụ thuộc bên phải',
+    'work.open.tip': 'Bản đồ mọi việc đang mở — đọc từng nhóm từ trên xuống',
     'work.none': 'chưa có bản đồ việc trong vault này',
     'work.err': 'không đọc được bản đồ việc: {e}',
     'work.ready': 'làm ngay được',
@@ -190,7 +190,7 @@ export const DICT = {
     'work.total': '{n} việc đang mở',
     'work.readyOnly': 'Chỉ việc làm được',
     'work.readyOnly.tip': 'Chỉ hiện việc làm ngay được trên máy này',
-    'work.foot': 'Cột trái = lá (không chờ ai) · mũi tên = <b>phải xong trước</b> · click một việc để mở note gốc · giao việc cho agent bằng <b>mã</b> (vd "làm W12")',
+    'work.foot': 'Trong mỗi nhóm: việc trước ở trên, việc tiếp theo ở dưới · mũi tên = <b>phải xong trước</b> · click một việc để mở note gốc · giao việc cho agent bằng <b>mã</b> (vd "làm W12")',
     'work.aria': 'Work Map — cây việc đang mở',
 
     /* --- panel: hoạt động agent --- */
@@ -619,7 +619,7 @@ export const DICT = {
     'work.h2': '🌳 Work map',
     'work.loading': 'reading…',
     'work.open': '🌳 Open the map',
-    'work.open.tip': 'Every open piece of work — leaves on the left, dependent work on the right',
+    'work.open.tip': 'Every open piece of work — read each group from top to bottom',
     'work.none': 'this vault has no work map',
     'work.err': 'could not read the work map: {e}',
     'work.ready': 'ready',
@@ -628,7 +628,7 @@ export const DICT = {
     'work.total': '{n} open items',
     'work.readyOnly': 'Ready only',
     'work.readyOnly.tip': 'Show only work that is actionable on this machine',
-    'work.foot': 'Left column = leaves (waiting on nothing) · arrow = <b>must be done first</b> · click an item to open the note that declared it · hand work to an agent by its <b>code</b> (e.g. "do W12")',
+    'work.foot': 'Within each group: earlier work above, dependent work below · arrow = <b>must be done first</b> · click an item to open the note that declared it · hand work to an agent by its <b>code</b> (e.g. "do W12")',
     'work.aria': 'Work map — tree of open work',
 
     'agent.h2': 'Agent activity',
