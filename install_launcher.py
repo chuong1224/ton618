@@ -34,8 +34,15 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 from activity_paths import local_data_dir, no_window_kwargs   # noqa: E402
 
-from activity_paths import APP_NAME
+from activity_paths import APP_NAME, APP_TITLE_ALIASES
 ENSURE = "ensure_graph3d.py"
+
+# W381: tên shortcut của các ĐỜI TRƯỚC. Đổi thương hiệu (KB Graph 3D → TON618) hay đổi
+# ổ đĩa (E → D, W377) xong, installer chỉ ghi .lnk theo APP_NAME hiện hành nên hai .lnk
+# tên cũ vẫn nằm ở Start Menu/Desktop trỏ ổ đã chết — bấm không chạy, mất icon, phải
+# xoá tay (11/09/2026). Nguồn duy nhất là APP_TITLE_ALIASES: thêm alias ở activity_paths
+# là installer tự biết dọn, không giữ danh sách thứ hai ở đây.
+OLD_NAMES = tuple(n for n in APP_TITLE_ALIASES if n != APP_NAME)
 
 # Truyền tham số cho PowerShell bằng BIẾN MÔI TRƯỜNG, không nội suy vào chuỗi lệnh:
 # đường dẫn vault thường có dấu cách, gạch nối, có khi cả dấu nháy (thư mục OneDrive
@@ -285,6 +292,30 @@ def shortcut_paths(name=APP_NAME, desktop=True, start_menu=True, dest_dir=None):
     return out
 
 
+def is_own_shortcut(path):
+    """.lnk này do installer đẻ ra? Dấu hiệu duy nhất: args gọi ensure_graph3d.py.
+    Trùng tên nhưng trỏ chỗ khác (người dùng tự tạo) thì KHÔNG phải của mình."""
+    try:
+        return ENSURE in (read_shortcut(path).get("args") or "")
+    except Exception:                              # noqa: BLE001
+        return False
+
+
+def stale_shortcuts(name=APP_NAME, desktop=True, start_menu=True, dest_dir=None,
+                    old_names=None):
+    """[(nhãn, đường dẫn .lnk)] mang TÊN CŨ (OLD_NAMES) nhưng vẫn là shortcut của app —
+    tức đời trước để lại, phải dọn khi cài lại / gỡ. Chỉ trả file có thật và là của
+    mình; tên cũ nào trùng tên đang cài thì bỏ qua (không tự dọn thứ mình sắp ghi)."""
+    out = []
+    for old in (OLD_NAMES if old_names is None else old_names):
+        if old == name:
+            continue
+        for label, p in shortcut_paths(old, desktop, start_menu, dest_dir):
+            if os.path.isfile(p) and is_own_shortcut(p):
+                out.append((label, p))
+    return out
+
+
 # ---------------------------------------------------------------- .lnk
 
 def write_shortcut(path, spec, hotkey=None):
@@ -467,13 +498,22 @@ def install(name=APP_NAME, desktop=True, start_menu=True, hotkey=None, port=8321
         print("  ! khong tao duoc icon (%s) — shortcut dung icon mac dinh" % exc)
         icon = None
     spec = shortcut_spec(port, app_mode, name, python, icon)
+    # W381: dọn .lnk tên cũ CỦA MÌNH trước khi ghi tên mới — .lnk tên hiện hành thì
+    # write_shortcut ghi đè nên đổi ổ đĩa tự lành; chỉ tên cũ là không ai đụng tới.
+    cleaned = []
+    for _label, p in stale_shortcuts(name, desktop, start_menu, dest_dir):
+        try:
+            os.remove(p)
+            cleaned.append(p)
+        except OSError:
+            pass
     made = []
     for label, p in paths:
         # Hotkey chỉ gán cho MỘT shortcut: hai .lnk cùng hotkey thì Windows chọn bừa.
         write_shortcut(p, spec, hotkey if (hotkey and not made) else None)
         made.append((label, p))
     refresh_shell()
-    return {"paths": made, "spec": spec, "icon": icon, "hotkey": hotkey}
+    return {"paths": made, "spec": spec, "icon": icon, "hotkey": hotkey, "cleaned": cleaned}
 
 
 def uninstall(name=APP_NAME, dest_dir=None):
@@ -482,16 +522,15 @@ def uninstall(name=APP_NAME, dest_dir=None):
         if not os.path.isfile(p):
             continue
         # Chỉ xoá shortcut CỦA MÌNH: trùng tên nhưng trỏ chỗ khác thì để yên.
-        try:
-            info = read_shortcut(p)
-            mine = ENSURE in (info.get("args") or "")
-        except Exception:                          # noqa: BLE001
-            mine = False
-        if mine:
+        if is_own_shortcut(p):
             os.remove(p)
             removed.append(p)
         else:
             kept.append(p)
+    # W381: gỡ luôn .lnk tên cũ của đời trước (stale_shortcuts đã lọc "của mình").
+    for _label, p in stale_shortcuts(name, True, True, dest_dir):
+        os.remove(p)
+        removed.append(p)
     for icon in icon_files():                      # gồm cả tên cố định của bản cũ
         try:
             os.remove(icon)
@@ -503,6 +542,8 @@ def uninstall(name=APP_NAME, dest_dir=None):
 
 def status(name=APP_NAME, dest_dir=None):
     out = []
+    for label, p in stale_shortcuts(name, True, True, dest_dir):
+        out.append({"label": label, "path": p, "exists": True, "stale": True})
     for label, p in shortcut_paths(name, True, True, dest_dir):
         if not os.path.isfile(p):
             out.append({"label": label, "path": p, "exists": False})
@@ -545,6 +586,9 @@ def main():
     try:
         if args.status:
             for row in status(args.name, args.dest_dir):
+                if row.get("stale"):
+                    print("  ! %s: shortcut TEN CU con sot %s — chay lai install de don" % (row["label"], row["path"]))
+                    continue
                 if not row["exists"]:
                     print("  - %s: CHUA CAI (%s)" % (row["label"], row["path"]))
                 else:
@@ -573,6 +617,8 @@ def main():
     print("TON618: da tao shortcut")
     for label, p in res["paths"]:
         print("  + %s: %s" % (label, p))
+    for p in res["cleaned"]:
+        print("  - da don shortcut ten cu: %s" % p)
     print("  chay: %s %s" % (res["spec"]["target"], res["spec"]["args"]))
     if managed_python_path(res["spec"]["target"]):
         print("  ! python nay do cong cu khac quan ly (venv/runtime tam) — go no la shortcut chet.")

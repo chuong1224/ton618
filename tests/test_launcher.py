@@ -7,6 +7,8 @@
   - install/read: .lnk tao that (COM WScript.Shell), doc lai ra dung target/args/hotkey
     — day la cho duy nhat bat duoc loi escape duong dan co dau cach + gach noi
   - uninstall: xoa .lnk cua minh, KHONG dung vao .lnk trung ten cua nguoi khac
+  - W381: .lnk mang TEN CU (OLD_NAMES, sinh tu APP_TITLE_ALIASES) cua doi truoc duoc
+    install don / uninstall go / status canh bao; ten cu cua nguoi khac thi de yen
   - ensure.browser_exe: tra None hoac duong dan CO THAT (khong doan bua)
   - ensure.bind_console: pythonw co sys.stdout None -> print() phai chay duoc va roi
     vao launcher.log (bug that neu quen: shortcut chay im lang, khong dau vet)
@@ -253,6 +255,63 @@ def test_shortcut_roundtrip():
           res3["removed"] == [other] and not os.path.isfile(other), res3)
 
 
+def test_stale_old_names():
+    """W381: doi ten app / doi o dia xong, .lnk mang TEN CU cua doi truoc phai duoc
+    install don va uninstall go; .lnk ten cu nhung cua nguoi khac thi de yen."""
+    check("W381: OLD_NAMES sinh tu APP_TITLE_ALIASES, khong chua ten hien hanh",
+          IL.OLD_NAMES and IL.APP_NAME not in IL.OLD_NAMES
+          and all(n in IL.APP_TITLE_ALIASES for n in IL.OLD_NAMES), IL.OLD_NAMES)
+
+    dest = os.path.join(ROOT, "stale")
+    os.makedirs(dest, exist_ok=True)
+    new_name, old_name = "TON618 TEST", "KB Graph 3D TEST"
+    # Gia lap doi truoc: .lnk ten cu, tro ensure o o dia da chet (E:) -> van la "cua minh".
+    old_lnk = os.path.join(dest, old_name + ".lnk")
+    IL.write_shortcut(old_lnk, {"target": sys.executable,
+                                "args": '"E:\\Vault Cu\\.graph3d\\ensure_graph3d.py" --app',
+                                "workdir": ROOT, "desc": "doi truoc", "icon": ""})
+    # .lnk ten cu nhung cua NGUOI KHAC (khong goi ensure) -> khong duoc dong toi.
+    foreign_name = "Foreign TEST"
+    foreign = os.path.join(dest, foreign_name + ".lnk")
+    IL.write_shortcut(foreign, {"target": os.path.join(os.environ.get("WINDIR", r"C:\Windows"),
+                                                       "system32", "notepad.exe"),
+                                "args": "", "workdir": ROOT, "desc": "cua nguoi khac", "icon": ""})
+    old_names = (old_name, foreign_name)
+
+    stale = IL.stale_shortcuts(new_name, dest_dir=dest, old_names=old_names)
+    check("W381: stale_shortcuts chi liet ke .lnk ten cu CUA MINH",
+          [p for _l, p in stale] == [old_lnk], stale)
+    check("W381: stale_shortcuts bo qua ten cu trung ten dang cai",
+          IL.stale_shortcuts(old_name, dest_dir=dest, old_names=old_names) == [], old_name)
+
+    # install qua OLD_NAMES that: tam thay danh sach module de khong phu thuoc ten thuong hieu.
+    saved = IL.OLD_NAMES
+    IL.OLD_NAMES = old_names
+    try:
+        res = IL.install(name=new_name, dest_dir=dest)
+        check("W381: install don .lnk ten cu cua minh, ghi .lnk ten moi",
+              res["cleaned"] == [old_lnk] and not os.path.isfile(old_lnk)
+              and os.path.isfile(os.path.join(dest, new_name + ".lnk")), res)
+        check("W381: install KHONG dong .lnk ten cu cua nguoi khac", os.path.isfile(foreign))
+        st = IL.status(new_name, dest_dir=dest)
+        check("W381: status khong con bao stale sau install",
+              not any(r.get("stale") for r in st), st)
+
+        IL.write_shortcut(old_lnk, {"target": sys.executable,
+                                    "args": '"E:\\Vault Cu\\.graph3d\\ensure_graph3d.py" --app',
+                                    "workdir": ROOT, "desc": "doi truoc", "icon": ""})
+        st = IL.status(new_name, dest_dir=dest)
+        check("W381: status bao .lnk ten cu con sot",
+              [r["path"] for r in st if r.get("stale")] == [old_lnk], st)
+        res2 = IL.uninstall(name=new_name, dest_dir=dest)
+        check("W381: uninstall go ca .lnk ten moi lan ten cu, giu cua nguoi khac",
+              sorted(res2["removed"]) == sorted([old_lnk, os.path.join(dest, new_name + ".lnk")])
+              and res2["kept"] == [] and os.path.isfile(foreign)
+              and not os.path.isfile(old_lnk), res2)
+    finally:
+        IL.OLD_NAMES = saved
+
+
 def test_favicon():
     # Cua so app (--app) lay icon tu FAVICON cua trang. Chromium BO QUA favicon dang
     # data: URI -> cua so roi ve icon Edge/Chrome (bug bao 28/07). Phai la file that
@@ -412,6 +471,7 @@ if __name__ == "__main__":
     test_icon()
     test_hidden_powershell()
     test_shortcut_roundtrip()
+    test_stale_old_names()
     test_favicon()
     test_refresh_shell()
     test_ensure_app()
