@@ -3,12 +3,14 @@
 
 3 lop, ca bo < 30s:
   1. Compile — syntax moi file .py goc (danh sach doc tu activity_paths.APP_PY, khong
-     chep tay) + tests/*.py; index.html phai ket thuc </html>;
-     src/* (ES modules giai doan 0) khong rong + LF + ket thuc \n + index tro /src/main.js
-     (cung logic voi _restart_sources_sane trong serve.py).
+     chep tay) + tests/*.py; src/* (ES modules giai doan 0) khong rong + LF + ket
+     thuc \n + index tro /src/main.js. index.html cut duoi do test_p5 P5.9 gac bang
+     chinh _restart_sources_sane (W426).
   2. Contract grep — ma hoa cac bug DA SUA (muc 2a..2o, < 1s): moi contract la mot bug
      tung xay ra, FAIL nghia la co nguoi vua dua bug do quay lai. 2a..2i tu review
-     2026-07-10; 2j/2k tu 2 su co publish doi 7+8 (danh sach file .py chep tay bi sot);
+     2026-07-10 (W426 bo 2d/2e/2h + nua solar cua 2c: dead state khong co hanh vi, 2e
+     thay bang test hanh vi app_static_file o test_reader, 2h do test_p2 --slow gac);
+     2j/2k tu 2 su co publish doi 7+8 (danh sach file .py chep tay bi sot);
      2m/2n tu W222 (quy uoc [SKIP] + danh sach bo unit chep tay); 2o tu W239 (bo test
      cham diem im lang thi khong dem duoc vung phu).
   3. Unit — test_p1/p3/p4/p5 + test_reader (guard /note + /asset, giai doan 1 Vault
@@ -331,7 +333,6 @@ def lop1_compile():
         except SyntaxError as e:
             ok, info = False, e
         check("1 compile " + name, ok, info)
-    check("1 index.html ket thuc </html>", read(INDEX).rstrip().endswith("</html>"))
     # Giai doan 0 Vault Cockpit: UI tach ES modules — kiem cung logic _restart_sources_sane
     srcs = src_files()
     check("1 src/ co main.js + style.css",
@@ -380,39 +381,23 @@ def lop2_contract():
         thieu = sorted(tools - matched)
         check("2b matcher hook bao trum TYPE_BY_TOOL", not thieu, thieu)
 
-    # 2c — P0.5 nhan chung 'Claude' + P2.1 xoa Solar (490 dong dead code).
+    # 2c — P0.5 nhan chung 'Claude' (literal 'Claude Code' tach mot agent thanh 2 danh tinh).
     # Tu giai doan 0: UI = index.html + src/* — quet ca bo, keo bug lach qua module.
     ui = ui_sources()
     cc = [n for n, txt in ui if "Claude Code" in txt]
     check("2c UI (index+src) khong con literal 'Claude Code'", not cc, cc)
-    sol = sorted({m for _, txt in ui for m in re.findall(r"(?i)solar\w*", txt)})
-    check("2c UI (index+src) sach dinh danh solar", not sol, sol[:5])
 
-    # 2d — P5.2: dead state started_at/log_path da xoa khoi /health.
-    # Match KEY co quote (bug goc la key JSON trong response) — ten ham hop le
-    # active_activity_log_path chua chuoi con "log_path" nen khong duoc match tho.
     sv = read(os.path.join(G3D, "serve.py"))
-    dead = [t for t in ("started_at", "log_path")
-            if re.search(r"[\"']%s[\"']" % t, sv)]
-    check("2d serve.py khong con key started_at/log_path", not dead, dead)
-
-    # 2e — P0.4: check vendor phai la PREFIX thu muc (prefix + os.sep), khong substring
-    check("2e serve.py co vendor_root = prefix + os.sep",
-          re.search(r"vendor_root\s*=.*os\.sep", sv) is not None)
 
     # 2f — P4.1: parse_jsonl MOT ban duy nhat (3 ban tung phan ky)
     defs = {n: read(p).count("def parse_jsonl") for n, p in py_main()}
     check("2f def parse_jsonl duy nhat, nam trong activity_paths.py",
           defs["activity_paths.py"] == 1 and sum(defs.values()) == 1, defs)
 
-    # 2g — P4.5: khong hardcode hash package MSIX, phai glob Claude_*
+    # 2g — P4.5: khong file app nao hardcode hash package MSIX (glob Claude_* bat package
+    # bat ky do test_p4 t4b gac bang hanh vi).
     hard = [n for n, p in py_main() if "Claude_pzs8sxrjxfjjc" in read(p)]
-    check("2g khong hardcode Claude_pzs8sxrjxfjjc + co glob Claude_*",
-          not hard and '"Claude_*"' in read(os.path.join(G3D, "activity_paths.py")), hard)
-
-    # 2h — P2.2: kill phai xac minh danh tinh PID truoc khi taskkill
-    check("2h run_graph3d.py co def _pid_cmdline",
-          "def _pid_cmdline" in read(os.path.join(G3D, "run_graph3d.py")))
+    check("2g khong file app nao hardcode Claude_pzs8sxrjxfjjc", not hard, hard)
 
     # 2i — bai hoc da-stream 10/07: badge version duy nhat, version moi = badge hien hanh + 1.
     # Quet ca src/* de khong ai nhet version string thu 2 vao module.
@@ -477,27 +462,35 @@ def lop2_contract():
 
 
 # ---- Lop 3: unit ----
+def chay_bo(name, path):
+    """Chay MOT bo test trong process con dung nhu lop 3 lam that; tra dict ma
+    phan_loai/bo_qua/dem_khang_dinh doc. test_selfcheck goi CHINH ham nay (khong chep
+    lai loi goi) — doi mot chu o day la phep do encoding cua no doi theo (W426).
+
+    Process con tren Windows ghi stdout theo locale (cp1252), con o day lai giai ma
+    UTF-8 — moi em-dash trong output test bien thanh U+FFFD. Nen ep con noi dung mot
+    thu tieng voi cha thay vi doan chu o dau kia. (env dung luc chay, KHONG chup tu
+    luc nap module: 2b co setdefault GRAPH3D_ACTIVITY_FILE ma con phai thua ke.)"""
+    r = subprocess.run([sys.executable, path],
+                       capture_output=True, text=True, encoding="utf-8",
+                       errors="replace", timeout=120, cwd=TESTS,
+                       env=dict(os.environ, PYTHONIOENCODING="utf-8"))
+    return {"test": name, "ok": r.returncode == 0, "output": r.stdout + r.stderr}
+
+
 def lop3_unit(slow):
     files = list(UNIT_FILES) + (list(SLOW_FILES) if slow else [])
     jobs = [(name, os.path.join(TESTS, name)) for name in files]
     private_backup_test = os.path.join(G3D, "test_backup.py")
     if os.path.isfile(private_backup_test):
         jobs.append(("test_backup.py (private)", private_backup_test))
-    # Process con tren Windows ghi stdout theo locale (cp1252), con o day lai giai ma
-    # UTF-8 — moi em-dash trong output test bien thanh U+FFFD. Nen ep con noi dung mot
-    # thu tieng voi cha thay vi doan chu o dau kia. (env dung luc chay, KHONG chup tu
-    # luc nap module: 2b co setdefault GRAPH3D_ACTIVITY_FILE ma con phai thua ke.)
-    env = dict(os.environ, PYTHONIOENCODING="utf-8")
     for name, path in jobs:
         t0 = time.perf_counter()
-        r = subprocess.run([sys.executable, path],
-                           capture_output=True, text=True, encoding="utf-8",
-                           errors="replace", timeout=120, cwd=TESTS, env=env)
+        res = chay_bo(name, path)
         dt = time.perf_counter() - t0
         # W222: returncode 0 KHONG con dong nghia voi "da do". Phan loai 4 nhan roi moi
         # ket luan — THIEU-LIB chan nhu FAIL (chua do duoc), PASS* thi hien ra nhung
         # khong chan (thieu `node` / khong phai Windows thi sua code cung khong het).
-        res = {"test": name, "ok": r.returncode == 0, "output": r.stdout + r.stderr}
         nhan, muc = phan_loai(res), "3 %s (%.1fs)" % (name, dt)
         # W239: dem khang dinh bo nay VUA CHAY THAT. In ra ngay de nguoi doc thay vung phu
         # truoc khi may keu, va ghi lai de luot sau con cai ma so.
@@ -519,6 +512,28 @@ def lop3_unit(slow):
         # Bo cham khong chay = mot muc KHONG DO DUOC that su, nen no phai di vao dung
         # cai so dem do — chu khong nam mot minh o dong ghi chu cuoi nhu truoc W222.
         skip("test_p2 (kill/port policy, ~15s) — them --slow de do that")
+
+
+def tong_ket(fails, thieu_lib, skips, n_khang_dinh, n_tut, chan_vung_phu):
+    """(dong TONG KET, ma thoat) — HAM THUAN de test bang bang case thay vi grep
+    nguyen van __main__ (W426; W239 tung do oan E3 khi doi dieu kien thoat).
+
+    FAIL va THIEU-LIB deu CHAN nhung KHONG gop ten (W218: FAIL = di sua code, THIEU-LIB
+    = va interpreter). Muc tu khai [SKIP] hien o TONG KET nhung KHONG chan (may khong
+    co `node` thi sua code cung khong het). Tut vung phu chua chap nhan thi CHAN."""
+    phan = []
+    if fails:
+        phan.append("FAIL %d muc: %s" % (len(fails), ", ".join(fails)))
+    if thieu_lib:
+        phan.append("CHUA DO DUOC %d bo vi thieu thu vien: %s"
+                    % (len(thieu_lib), ", ".join(sorted(thieu_lib))))
+    ket = " · ".join(phan) if phan else "ALL PASS"
+    if skips:
+        ket += " · BO QUA %d muc" % len(skips)
+    ket += " · %d khang dinh" % n_khang_dinh
+    if n_tut:
+        ket += " · TUT VUNG PHU %d muc" % n_tut
+    return ket, (1 if (fails or thieu_lib or chan_vung_phu) else 0)
 
 
 if __name__ == "__main__":
@@ -569,18 +584,8 @@ if __name__ == "__main__":
         ghi_moc(ghi)
     chan_vung_phu = bool(tut or bien_mat) and not vi_sao_nhan
 
-    phan = []
-    if fails:
-        phan.append("FAIL %d muc: %s" % (len(fails), ", ".join(fails)))
-    if thieu_lib:
-        phan.append("CHUA DO DUOC %d bo vi thieu thu vien: %s"
-                    % (len(thieu_lib), ", ".join(sorted(thieu_lib))))
-    ket = " · ".join(phan) if phan else "ALL PASS"
-    if skips:
-        ket += " · BO QUA %d muc" % len(skips)
-    ket += " · %d khang dinh" % sum(khang_dinh.values())
-    if tut or bien_mat:
-        ket += " · TUT VUNG PHU %d muc" % (len(tut) + len(bien_mat))
+    ket, ma_thoat = tong_ket(fails, thieu_lib, skips, sum(khang_dinh.values()),
+                             len(tut) + len(bien_mat), chan_vung_phu)
     print("\nTONG KET selfcheck (%.1fs): %s" % (dt, ket))
     if tut or bien_mat:
         print("\n" + "=" * 72)
@@ -624,4 +629,4 @@ if __name__ == "__main__":
     # Tut vung phu CHAN nhu FAIL. Bao ma khong chan thi phien sau chi doc exit code (dung
     # cai bay W222 pass 2 da phai va: tai lieu bao "exit 0 la du") va di tiep — thanh ra
     # lai dung mot kenh im lang nua. Loi ra la `--chap-nhan "…"`, khong phai lam ngo.
-    sys.exit(1 if (fails or thieu_lib or chan_vung_phu) else 0)
+    sys.exit(ma_thoat)

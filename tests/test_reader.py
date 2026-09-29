@@ -65,9 +65,29 @@ with mock.patch.object(SV.os.path, "realpath", side_effect=fake_realpath):
 for ext, want in [(".jpg", "image/jpeg"), (".webp", "image/webp"), (".pdf", "application/pdf")]:
     check("R MIME %s" % ext, SV.MIME.get(ext) == want, SV.MIME.get(ext))
 
-# Khong hoi quy: cac ham loi serve van nguyen (endpoint moi khong duoc pha contract cu)
-for fn in ("read_activity_all", "read_all_events", "build_chains", "_restart_sources_sane"):
-    check("R serve.%s con nguyen" % fn, hasattr(SV, fn))
+# /src/* + /vendor/*: hang rao file tinh cua APP (P0.4). Thay contract grep 2e bam ten
+# bien (W426): app gia trong scratch co thu muc ANH EM vendor_old/src2 + file goc app —
+# bo os.sep khoi prefix thi `/vendor/../vendor_old/x` lot ra va case duoi do.
+app_fake = os.path.join(SCRATCH, "reader_app_static")
+for rel in ("src/main.js", "src2/x.js", "vendor/lib.js", "vendor_old/x.js", "serve.py"):
+    p = os.path.join(app_fake, *rel.split("/"))
+    os.makedirs(os.path.dirname(p), exist_ok=True)
+    with open(p, "w", encoding="utf-8") as f:
+        f.write("// %s\n" % rel)
+real_here = SV.HERE
+SV.HERE = app_fake
+try:
+    got = {u: SV.app_static_file(u) for u in (
+        "/src/main.js", "/vendor/lib.js", "/vendor/../vendor_old/x.js",
+        "/src/../src2/x.js", "/vendor/../serve.py", "/src/khong-co.js")}
+finally:
+    SV.HERE = real_here
+check("R file tinh app: /src + /vendor phuc vu dung file",
+      got["/src/main.js"] and got["/src/main.js"].endswith("main.js")
+      and got["/vendor/lib.js"] and got["/vendor/lib.js"].endswith("lib.js"), got)
+check("R file tinh app: chan thu muc anh em (vendor_old, src2), file goc app, file khong co",
+      [got[u] for u in ("/vendor/../vendor_old/x.js", "/src/../src2/x.js",
+                        "/vendor/../serve.py", "/src/khong-co.js")] == [None] * 4, got)
 
 # W173: action OS cho attachment — cung hang rao vault_file, POST se goi ham nay.
 calls = []
@@ -130,8 +150,10 @@ def read(p):
         return f.read()
 
 html, reader, viewer, math_src, css = map(read, (INDEX, READER, VIEWER, MATH, STYLE))
-for name, text in (("index", html), ("reader", reader), ("viewer", viewer), ("math", math_src), ("style", css)):
-    check("R lightbox %s giu LF" % name, "\r\n" not in text)
+# LF cua index.html (gotcha #15) phai doc BINARY: text-mode doi \r\n thanh \n truoc khi
+# kiem nen khong bao gio do duoc. src/* do selfcheck lop 1 gac (cung doc binary).
+with open(INDEX, "rb") as f:
+    check("R lightbox index giu LF", b"\r\n" not in f.read())
 
 ids = ("imgv", "imgv-box", "imgv-head", "imgv-title", "imgv-scale", "imgv-stage",
        "imgv-image", "imgv-menu", "imgv-status", "imgv-minus", "imgv-plus",

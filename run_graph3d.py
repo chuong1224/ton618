@@ -97,10 +97,8 @@ def kill_pid(pid):
     """Giết process giữ port — CHỈ khi xác minh được nó là graph3d (cmdline chứa
     serve.py / .graph3d). P2.2 chốt 2026-07-10: app LẠ tình cờ bind
     port không bị taskkill oan cả cây process; không đọc được cmdline cũng KHÔNG
-    giết (default-deny). Trả True = đã xử lý xong (giết / không có gì để giết),
-    False = từ chối giết — caller phải bỏ cuộc có thông điệp, đừng lặp vô hạn."""
-    if not pid:
-        return True
+    giết (default-deny). Trả True = đã giết xong, False = từ chối giết — caller
+    phải bỏ cuộc có thông điệp, đừng lặp vô hạn. Caller tự chặn pid rỗng."""
     cmd = _pid_cmdline(pid)
     low = (cmd or "").lower()
     if "serve.py" not in low and ".graph3d" not in low:

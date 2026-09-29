@@ -48,12 +48,43 @@ h = RG.health_retry(59321)
 dt = time.perf_counter() - t0
 check("P5.10 port trong -> None nhanh (1 vong netstat, <5s)", h is None and dt < 5, round(dt, 2))
 
-# P5.2: dead state da xoa khoi serve
-check("P5.2a _graceful/ACTIVITY_FILE/STARTED_AT da xoa",
-      not hasattr(SV, "_graceful") and not hasattr(SV, "ACTIVITY_FILE") and not hasattr(SV, "STARTED_AT"))
-
 # P5.9: nguon that dang lanh lan -> True
 check("P5.9 _restart_sources_sane() = True voi nguon that", SV._restart_sources_sane() is True)
+
+# P5.9 chieu am: ban sao nguon trong scratch, lan luot lam cut tung loai file ma
+# OneDrive co the ghi do -> phai False (chong restart vao code cut). Chi nua duong
+# "True" thi bo han kiem van xanh; day la loi P5.9 sinh ra de chan.
+sane_dir = os.path.join(SCRATCH, "sane_p5")
+shutil.rmtree(sane_dir, ignore_errors=True)
+os.makedirs(os.path.join(sane_dir, "src"))
+for name in list(SV.restart_py_files()) + ["index.html"]:
+    shutil.copyfile(os.path.join(G3D, name), os.path.join(sane_dir, name))
+for sp in os.listdir(os.path.join(G3D, "src")):
+    if os.path.isfile(os.path.join(G3D, "src", sp)):
+        shutil.copyfile(os.path.join(G3D, "src", sp), os.path.join(sane_dir, "src", sp))
+real_here = SV.HERE
+SV.HERE = sane_dir
+try:
+    check("P5.9b ban sao nguyen ven -> True", SV._restart_sources_sane() is True)
+
+    def _cut(rel, keep):
+        """Ghi de file bang `keep` byte dau, chay kiem, roi tra ve ban goc."""
+        p = os.path.join(sane_dir, *rel.split("/"))
+        raw = open(p, "rb").read()
+        open(p, "wb").write(raw[:keep])
+        try:
+            return SV._restart_sources_sane()
+        finally:
+            open(p, "wb").write(raw)
+
+    idx_len = os.path.getsize(os.path.join(sane_dir, "index.html"))
+    check("P5.9c index.html cut (mat </html>) -> False", _cut("index.html", idx_len // 2) is False)
+    check("P5.9d serve.py cut giua chung -> False", _cut("serve.py", 1000) is False)
+    first_src = sorted(os.listdir(os.path.join(sane_dir, "src")))[0]
+    check("P5.9e src/* rong -> False", _cut("src/" + first_src, 0) is False, first_src)
+finally:
+    SV.HERE = real_here
+    shutil.rmtree(sane_dir, ignore_errors=True)
 
 try: os.remove(os.environ["GRAPH3D_ACTIVITY_FILE"])
 except OSError: pass

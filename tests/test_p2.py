@@ -46,9 +46,6 @@ finally:
         zombie.kill()
     os.remove(fake)
 
-# t4: pid rong -> True (khong co gi de giet, di tiep)
-check("t4 kill_pid(None) = True", RG.kill_pid(None) is True)
-
 # t5: TICH HOP — app la giu port, supervisor phai bo cuoc exit 2, app song.
 # Holder bind port 0 va IN port ve cho parent NHUNG van giu listener mo xuyen suot
 # phep thu. Nhu vay moi selfcheck co port rieng ma khong co khoang dua

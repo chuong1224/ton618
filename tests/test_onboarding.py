@@ -13,7 +13,7 @@
     may, khong duoc roi vao working tree repo public — su co doi 4 va doi 6)
   - danh sach dan xuat: restart_py_files() = phan .py cua _VERSION_FILES va nam trong APP_PY
 """
-import contextlib, io, os, shutil, subprocess, sys
+import contextlib, io, os, re, shutil, subprocess, sys
 sys.dont_write_bytecode = True   # khong sinh __pycache__ trong vault
 try:
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")  # console cp1252
@@ -57,6 +57,8 @@ def build_fixture():
     write(os.path.join(STARTER, "What Is a Note.md"), "# What Is a Note\n")
     write(os.path.join(STARTER, "attachments", "note.txt"), "kem theo\n")
     write(os.path.join(STARTER, ".gitkeep"), "")
+    # dot-FOLDER co .md: scanner graph (count_notes) va install_starter deu phai bo qua
+    write(os.path.join(STARTER, ".obsidian", "workspace.md"), "# khong phai note\n")
     os.makedirs(VAULT_EMPTY, exist_ok=True)
     write(os.path.join(VAULT_FULL, "Note cua toi.md"), "# Note cua toi\n")
     # Bo app gia: du moi file khai trong APP_TOP/APP_DIRS
@@ -101,16 +103,28 @@ check("installed_in_vault: ten thu muc .graph3d -> True",
       ONB.installed_in_vault(os.path.join(ROOT, "vault-x", ".graph3d")) is True)
 check("installed_in_vault: clone bare (ten repo) -> False",
       ONB.installed_in_vault(os.path.join(ROOT, "agents-knowledge-base")) is False)
-check("state mang co installed + ten thu muc app",
-      "installed" in st and st["app_dir"] == os.path.basename(os.path.dirname(os.path.abspath(ONB.__file__))))
+# W180: vault chon tuong minh (khac thu muc cha cua app) khong duoc bao "cai sai cho";
+# con vault = thu muc cha thi quay ve phan xet W42 theo ten thu muc app.
+APP_DIR = os.path.dirname(os.path.abspath(ONB.__file__))
+check("state installed: vault chon noi khac -> True (W180); vault = cha app -> theo ten .graph3d (W42)",
+      st["installed"] is True
+      and ONB.state(os.path.dirname(APP_DIR), notes=1)["installed"] == ONB.installed_in_vault(APP_DIR)
+      and st["app_dir"] == os.path.basename(APP_DIR), st)
 check("state co lenh cai dat dung cho ca canh bao",
       ".graph3d" in st["cmd"]["install"] and "clone" in st["cmd"]["install"], st["cmd"])
 
-# count_bundled: cache theo mtime (state() bay gio chay ca khi vault KHONG trong)
+# count_bundled: cache theo mtime thu muc goc (state() chay ca khi vault KHONG trong).
+# Them note vao thu muc CON khong doi mtime thu muc goc -> ban cache van tra so cu,
+# trong khi count_notes (khong cache) thay ngay. Bo cache thi hai so bang nhau.
 n1 = ONB.count_bundled(STARTER)
-n2 = ONB.count_bundled(STARTER)
-check("count_bundled cache theo mtime (2 lan cung ket qua)", n1 == n2 == 2, (n1, n2))
-check("count_bundled thu muc khong ton tai -> 0", ONB.count_bundled(os.path.join(ROOT, "khong-co")) == 0)
+extra = os.path.join(STARTER, "attachments", "Them Sau.md")
+write(extra, "# Them Sau\n")
+try:
+    check("count_bundled cache theo mtime thu muc goc (khong quet lai)",
+          (n1, ONB.count_bundled(STARTER), ONB.count_notes(STARTER)) == (2, 2, 3),
+          (n1, ONB.count_bundled(STARTER), ONB.count_notes(STARTER)))
+finally:
+    os.remove(extra)
 
 # ---- W42: note "cua vao" mo ngay sau khi dung starter vault ----
 check("entry_note uu tien 'Start Here'",
@@ -185,7 +199,7 @@ with open(os.path.join(G3D, "src", "style.css"), encoding="utf-8") as f:
 with open(os.path.join(G3D, "index.html"), encoding="utf-8") as f:
     html = f.read()
 check("UI vault trong gan class vault-empty tu so note hien hanh",
-      "classList.toggle('vault-empty', !S.all.meta.notes)" in onb_js)
+      re.search(r"classList\.toggle\('vault-empty',\s*!\s*[\w.]*\bmeta\.notes\)", onb_js))
 check("CSS vault-empty an panel/cay/hint/layout khoi man dau",
       ":root.vault-empty #panel" in css and ":root.vault-empty #sidebar" in css
       and ":root.vault-empty #hint" in css and ":root.vault-empty #layout-fab" in css)
@@ -196,10 +210,13 @@ check("nut dong onboarding la button co aria-label",
       '<button type="button" id="onb-x"' in html and 'data-i18n-aria="onb.close"' in html)
 
 try:
-    ONB.install_starter(VAULT_EMPTY, src=os.path.join(ROOT, "khong-co-that"))
+    os.environ["GRAPH3D_STARTER_DIR"] = os.path.join(ROOT, "khong-co-that")
+    ONB.install_starter(VAULT_EMPTY)
     check("install_starter bao loi khi thieu nguon", False, "khong raise")
 except ONB.OnboardingError as e:
     check("install_starter bao loi khi thieu nguon", "starter" in str(e), str(e))
+finally:
+    os.environ["GRAPH3D_STARTER_DIR"] = STARTER
 
 # ---- mirror_app ----
 m1 = ONB.mirror_app(DST_APP, SRC_APP)
@@ -241,11 +258,8 @@ check("demo_env: 3 duong runtime deu NGOAI thu muc demo", outside,
 check("demo_env giu env goc", env.get("PATH") == "x")
 check("demo_env tat ghi bytecode (khoi sinh __pycache__ trong cay repo)",
       env.get("PYTHONDONTWRITEBYTECODE") == "1", env.get("PYTHONDONTWRITEBYTECODE"))
-# GRAPH3D_HEAT_DIR phai that su doi duong store heat (khong phai bien trang tri)
-os.environ["GRAPH3D_HEAT_DIR"] = ROOT
-check("GRAPH3D_HEAT_DIR doi duong store heat tich luy",
-      os.path.dirname(AP.cumulative_heat_path()) == ROOT, AP.cumulative_heat_path())
-del os.environ["GRAPH3D_HEAT_DIR"]
+# Chieu "co env -> doi duong" do test_journal J9p0 + test_selfcheck H-explicit gac.
+os.environ.pop("GRAPH3D_HEAT_DIR", None)
 check("bo env -> store heat ve lai .graph3d",
       os.path.dirname(AP.cumulative_heat_path()) == G3D, AP.cumulative_heat_path())
 

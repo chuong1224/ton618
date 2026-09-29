@@ -32,28 +32,15 @@ def check(name, cond, info=""):
         fails.append(name)
 
 # ---- P1.1: trich path tu field cau truc ----
-def _find_nested_note():
-    """Tim 1 note THAT nam trong folder con (path co chu HOA) — test tung hardcode
-    'Vault Operation/KB Graph 3D/KB Graph 3D.md' va GAY khi vault tai cau truc
-    folder-per-note (16/07): duong dan note that phai do dong, khong dong cung."""
-    for root, dirs, files in os.walk(VAULT):
-        dirs[:] = sorted(d for d in dirs if not d.startswith(".") and d != "node_modules")
-        for fn in sorted(files):
-            if not fn.lower().endswith(".md"):
-                continue
-            rel = os.path.relpath(os.path.join(root, fn), VAULT).replace("\\", "/")
-            if "/" in rel and rel != rel.lower():
-                return rel
-    return None
-
-REL = _find_nested_note()
-check("P1.0 vault co it nhat 1 note trong folder con", REL is not None, REL)
+# Note trong folder con, co chu HOA — do vault gia o tren tu dung (W426 bo P1.0:
+# tu W37 no luon dung vi chinh bo ghi file nay).
+REL = "Projects/DemoNote.md"
 
 read_payload = {
     "tool_name": "Read",
     "tool_input": {"file_path": VAULT + r"\Index.md"},
     "tool_response": {"file": {"content":
-        "noi dung co nhac " + VAULT + "\\" + (REL or "").replace("/", "\\") + " trong bai"}},
+        "noi dung co nhac " + VAULT + "\\" + REL.replace("/", "\\") + " trong bai"}},
 }
 p = LA._paths_from_payload("read", read_payload)
 check("P1.1a Read dung file_path, KHONG quet tool_response", p == [VAULT + r"\Index.md"], p)
@@ -72,7 +59,7 @@ orig_bump = LA._bump_cumulative
 LA._bump_cumulative = lambda *a, **k: None   # khong dung store heat that
 try:
     open(LOG, "w").close()
-    n = LA.append_events("read", [(REL or "").lower().replace("/", "\\")])
+    n = LA.append_events("read", [REL.lower().replace("/", "\\")])
     line = json.loads(open(LOG, encoding="utf-8").read().strip())
     check("P1.5 rel ghi log dung case that tren dia",
           n == 1 and line["file"] == REL, line.get("file"))

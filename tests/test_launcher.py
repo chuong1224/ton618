@@ -91,10 +91,14 @@ def test_registry_pythonw():
     store_alias = os.path.join(
         r"C:\Users\Tester\AppData\Local\Microsoft\WindowsApps",
         r"PythonSoftwareFoundation.Python.3.13_qbz5n2kfra8p0\pythonw.exe")
-    got = IL.store_pythonw_alias(
-        store_real,
-        isfile=lambda p: os.path.normcase(p) == os.path.normcase(store_alias),
-        localappdata=r"C:\Users\Tester\AppData\Local")
+    saved_lad = os.environ["LOCALAPPDATA"]
+    os.environ["LOCALAPPDATA"] = r"C:\Users\Tester\AppData\Local"
+    try:
+        got = IL.store_pythonw_alias(
+            store_real,
+            isfile=lambda p: os.path.normcase(p) == os.path.normcase(store_alias))
+    finally:
+        os.environ["LOCALAPPDATA"] = saved_lad
     check("Store Python dung app-exec alias on dinh thay duong co so build", got == store_alias, got)
 
     fake = FakeWinreg({
@@ -175,11 +179,14 @@ def test_icon():
         dims.append(w)
         if off + size > len(raw) or size <= 0 or w != h:
             ok = False
-        # BITMAPINFOHEADER: height = 2 * width (anh XOR + mask AND)
-        hdr = struct.unpack("<Iii", raw[off:off + 12])
-        if hdr[0] != 40 or hdr[1] != w or hdr[2] != 2 * w:
+        # BITMAPINFOHEADER: height = 2 * width (anh XOR + mask AND); biSizeImage = CHI
+        # anh XOR 32bpp (w*w*4). Ghi du mask vao day la bug "to giay trang" 28/07:
+        # GDI+ bo qua field nay, rieng Explorer dung no de tim mask.
+        hdr = struct.unpack("<IiiHHII", raw[off:off + 24])
+        if hdr[0] != 40 or hdr[1] != w or hdr[2] != 2 * w or hdr[6] != w * w * 4:
             ok = False
-    check("ico moi anh: entry tro dung, BITMAPINFOHEADER hop le", ok, dims)
+    check("ico moi anh: entry tro dung, BITMAPINFOHEADER hop le (biSizeImage khong gom mask)",
+          ok, dims)
     check("ico dung kich thuoc da yeu cau", dims == [16, 32], dims)
     check("ico icon_dir theo GRAPH3D_ICON_DIR",
           os.path.normcase(IL.icon_dir()) == os.path.normcase(os.path.join(ROOT, "icon")),
@@ -215,11 +222,9 @@ def test_hidden_powershell():
         out = IL._powershell("'ok'")
     finally:
         IL.subprocess.run = real_run
-    check("PowerShell helper tra stdout binh thuong", out == "ok", out)
-    check("PowerShell helper co chay that trong may gac", len(calls) == 1, calls)
-    flags = calls[0][1].get("creationflags") if calls else None
-    check("PowerShell helper dung CREATE_NO_WINDOW, khong loe terminal",
-          flags == 0x08000000, flags)
+    flags = calls[0][1].get("creationflags") if len(calls) == 1 else None
+    check("PowerShell helper chay dung 1 lan, dung CREATE_NO_WINDOW, khong loe terminal",
+          flags == 0x08000000, (len(calls), flags))
 
 
 def test_shortcut_roundtrip():
@@ -234,8 +239,8 @@ def test_shortcut_roundtrip():
           (res["icon"], info.get("icon")))
     check("lnk doc lai: target khop", os.path.normcase(info["target"]) ==
           os.path.normcase(res["spec"]["target"]), info)
-    check("lnk doc lai: args giu nguyen duong dan co dau cach",
-          "ensure_graph3d.py" in info["args"] and G3D.split(os.sep)[-1] in info["args"], info["args"])
+    check("lnk doc lai: args giu nguyen (ke ca duong dan co dau cach)",
+          info["args"] == res["spec"]["args"], (info["args"], res["spec"]["args"]))
     check("lnk doc lai: hotkey da gan", (info.get("hotkey") or "").upper().endswith("F9"), info)
     check("lnk doc lai: workdir la thu muc app",
           os.path.normcase(info["workdir"].rstrip("\\")) == os.path.normcase(G3D), info["workdir"])
@@ -278,16 +283,16 @@ def test_stale_old_names():
                                 "args": "", "workdir": ROOT, "desc": "cua nguoi khac", "icon": ""})
     old_names = (old_name, foreign_name)
 
-    stale = IL.stale_shortcuts(new_name, dest_dir=dest, old_names=old_names)
-    check("W381: stale_shortcuts chi liet ke .lnk ten cu CUA MINH",
-          [p for _l, p in stale] == [old_lnk], stale)
-    check("W381: stale_shortcuts bo qua ten cu trung ten dang cai",
-          IL.stale_shortcuts(old_name, dest_dir=dest, old_names=old_names) == [], old_name)
-
-    # install qua OLD_NAMES that: tam thay danh sach module de khong phu thuoc ten thuong hieu.
+    # Tam thay danh sach module de khong phu thuoc ten thuong hieu.
     saved = IL.OLD_NAMES
     IL.OLD_NAMES = old_names
     try:
+        stale = IL.stale_shortcuts(new_name, dest_dir=dest)
+        check("W381: stale_shortcuts chi liet ke .lnk ten cu CUA MINH",
+              [p for _l, p in stale] == [old_lnk], stale)
+        check("W381: stale_shortcuts bo qua ten cu trung ten dang cai",
+              IL.stale_shortcuts(old_name, dest_dir=dest) == [], old_name)
+
         res = IL.install(name=new_name, dest_dir=dest)
         check("W381: install don .lnk ten cu cua minh, ghi .lnk ten moi",
               res["cleaned"] == [old_lnk] and not os.path.isfile(old_lnk)
@@ -322,12 +327,14 @@ def test_favicon():
     if link:
         check("favicon KHONG dung data: URI", "data:" not in link.group(0), link.group(0)[:90])
         check("favicon tro /favicon.ico", "/favicon.ico" in link.group(0), link.group(0)[:90])
-    sv = open(os.path.join(G3D, "serve.py"), encoding="utf-8").read()
-    check("serve.py phuc vu /favicon.ico bang icon that",
-          "def favicon_bytes" in sv and "install_launcher.icon_bytes" in sv
-          and "favicon_bytes()" in sv)
-    raw = IL.icon_bytes((16, 32))
-    check("icon_bytes tra ICO hop le", raw[:4] == b"\x00\x00\x01\x00" and len(raw) > 100, raw[:8])
+    os.environ.setdefault("GRAPH3D_ACTIVITY_FILE", os.path.join(ROOT, "act_launcher.jsonl"))
+    import serve as SV
+    raw = SV.favicon_bytes()
+    n_img = struct.unpack("<HHH", raw[:6])[2] if len(raw) >= 6 else 0
+    sizes = tuple(raw[6 + 16 * i] or 256 for i in range(n_img))
+    check("serve phuc vu /favicon.ico la ICO that, CUNG nguon ve voi icon shortcut",
+          raw[:4] == b"\x00\x00\x01\x00" and n_img > 0
+          and raw == IL.icon_bytes(sizes), (raw[:8], sizes))
     import activity_paths as AP
     check("install_launcher nam trong _VERSION_FILES (doi icon -> server restart)",
           "install_launcher.py" in AP._VERSION_FILES, AP._VERSION_FILES)
@@ -336,15 +343,41 @@ def test_favicon():
 def test_refresh_shell():
     # Icon cache bam theo DUONG DAN .ico: ghi de cung ten = Explorer van ve ban cu
     # (icon "to giay trang" bao 28/07) -> install PHAI bao shell vut cache.
-    check("refresh_shell chay duoc, khong nem", IL.refresh_shell() in (True, False))
-    src = open(os.path.join(G3D, "install_launcher.py"), encoding="utf-8").read()
-    body = src[src.index("def install("):src.index("def uninstall(")]
-    check("install() co goi refresh_shell", "refresh_shell()" in body)
+    hits = []
+    real_refresh = IL.refresh_shell
+    IL.refresh_shell = lambda: hits.append(1) or True
+    dest = os.path.join(ROOT, "lnk-refresh")
+    try:
+        IL.install(name="KB Graph 3D REFRESH TEST", dest_dir=dest)
+        check("install() bao shell vut icon cache (refresh_shell)", len(hits) >= 1, hits)
+        IL.uninstall(name="KB Graph 3D REFRESH TEST", dest_dir=dest)
+    finally:
+        IL.refresh_shell = real_refresh
 
 
 def test_ensure_app():
-    exe = ENS.browser_exe()
-    check("browser_exe: None hoac file CO THAT", exe is None or os.path.isfile(exe), exe)
+    keys = ("PROGRAMFILES(X86)", "PROGRAMFILES", "LOCALAPPDATA", "PATH")
+    saved_env = {k: os.environ.get(k) for k in keys}
+    pf = os.path.join(ROOT, "pf-empty")
+    os.makedirs(pf, exist_ok=True)
+    try:
+        for k in keys[:3]:
+            os.environ[k] = pf
+        os.environ["PATH"] = pf
+        none_found = ENS.browser_exe()
+        edge = os.path.join(pf, "Microsoft", "Edge", "Application", "msedge.exe")
+        os.makedirs(os.path.dirname(edge), exist_ok=True)
+        open(edge, "wb").close()
+        found = ENS.browser_exe()
+    finally:
+        for k, v in saved_env.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
+    check("browser_exe: khong co trinh duyet -> None, co msedge.exe -> dung file do",
+          none_found is None and found is not None
+          and os.path.normcase(found) == os.path.normcase(edge), (none_found, found))
 
     # pythonw: sys.stdout is None -> print() nổ AttributeError nếu không trói vào log
     real = sys.stdout
@@ -456,9 +489,6 @@ def test_ton618_compatibility():
     check("TON618: old and new names accepted, unrelated name rejected",
           ENS.app_name_matches("KB Graph 3D") and ENS.app_name_matches("TON618")
           and not ENS.app_name_matches("Other App"))
-    spec = IL.shortcut_spec(python=sys.executable)
-    check("TON618: shortcut keeps old physical entry point",
-          IL.APP_NAME == "TON618" and "ensure_graph3d.py" in spec["args"])
 
 
 if __name__ == "__main__":

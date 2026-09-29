@@ -46,8 +46,10 @@ write(os.path.join(TV, "Ngoại Trang Tết.md"),
 write(os.path.join(TV, ".secret", "hidden.md"), "bimatkhongdocduoc ngoại trang\n")
 write(os.path.join(TV, "node_modules", "junk.md"), "ngoại trang rác vendor\n")
 
+SV.VAULT = TV   # search_notes quet vault dang active cua server, dung nhu /search
+
 def hit_paths(q, **kw):
-    return [r["path"] for r in SV.search_notes(q, vault=TV, **kw)]
+    return [r["path"] for r in SV.search_notes(q, **kw)]
 
 # Khong dau + hoa thuong deu khop
 check("F khop khong dau", "Ghi Chú Mèo.md" in hit_paths("ngoai trang meo"))
@@ -61,23 +63,18 @@ check("F loai node_modules", all("node_modules" not in p for p in hit_paths("ngo
 rank = hit_paths("ngoai trang")
 check("F ten note xep tren than note", rank and rank[0] == "Ngoại Trang Tết.md", rank)
 # Snippet: text GOC con dau quanh vi tri khop
-res = SV.search_notes("nhan roi", vault=TV)
+res = SV.search_notes("nhan roi")
 check("F snippet giu text goc co dau", res and "Nhàn Rỗi" in res[0]["snippet"],
       res[0]["snippet"] if res else None)
 # hits = TONG lan khop cua MOI tu trong than ("ngoai"x2 + "trang"x2 = 4)
-res = SV.search_notes("ngoai trang", vault=TV)
+res = SV.search_notes("ngoai trang")
 row = next((r for r in res if r["path"] == "Ghi Chú Mèo.md"), None)
 check("F hits dem du lan khop moi tu", row is not None and row["hits"] == 4, row)
 # Query rong / toan khoang trang -> rong, khong loi
-check("F query rong tra rong", SV.search_notes("", vault=TV) == [])
-check("F query khoang trang tra rong", SV.search_notes("   ", vault=TV) == [])
+check("F query rong tra rong", SV.search_notes("") == [])
+check("F query khoang trang tra rong", SV.search_notes("   ") == [])
 # limit cat dung
-check("F limit=1 tra 1 ket qua", len(SV.search_notes("ngoai trang", vault=TV, limit=1)) == 1)
-
-# Khong hoi quy: cac ham loi serve + guard Reader van nguyen
-for fn in ("vault_file", "read_activity_all", "read_all_events", "build_chains",
-           "_restart_sources_sane", "search_notes", "_fold"):
-    check("F serve.%s ton tai" % fn, hasattr(SV, fn))
+check("F limit=1 tra 1 ket qua", len(SV.search_notes("ngoai trang", limit=1)) == 1)
 
 # W173: attachment co mat trong ca hai o tim va moi loi vao deu dung mot dialog.
 def read_app(rel):
@@ -89,7 +86,6 @@ reader = read_app("src/reader.js")
 graph = read_app("src/graph.js")
 ui = read_app("src/ui.js")
 main = read_app("src/main.js")
-i18n = read_app("src/i18n.js")
 index = read_app("index.html")
 try:
     actions = read_app("src/file-actions.js")
@@ -115,10 +111,6 @@ ids = ("file-act", "file-act-box", "file-act-title", "file-act-path", "file-act-
 check("F W173 dialog DOM du %d id" % len(ids),
       all(('id=\"%s\"' % x) in index for x in ids),
       [x for x in ids if ('id=\"%s\"' % x) not in index])
-for key in ("file.title", "file.open", "file.reveal", "file.preview", "file.done.open",
-            "file.download", "file.done.reveal", "file.error", "qs.files"):
-    check("F W173 i18n VI+EN %s" % key, i18n.count("'%s'" % key) == 2,
-          i18n.count("'%s'" % key))
 
 # W174: Office/archive phai download cung tab, khong de lai cua so app den; chi cac
 # dinh dang browser render duoc moi mo tab preview.

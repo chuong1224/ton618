@@ -178,7 +178,7 @@ def state(vault, notes=None):
 
 
 # ---------------------------------------------------------------- tạo vault đầu tiên
-def install_starter(target, src=None, force=False):
+def install_starter(target, force=False):
     """Chép `starter-vault/` vào `target` (vault đang trống hoặc thư mục mới).
 
     Hai hàng rào, cố ý KHÔNG có cờ nào tắt được hàng rào thứ hai:
@@ -187,7 +187,7 @@ def install_starter(target, src=None, force=False):
          import content vào vault đang sống;
       2. TUYỆT ĐỐI không đè file trùng tên — file đã có được bỏ qua và báo lại.
     """
-    src = os.path.abspath(src or starter_dir())
+    src = os.path.abspath(starter_dir())
     target = os.path.abspath(target)
     if not os.path.isdir(src):
         raise OnboardingError("không tìm thấy starter-vault: %s" % src, "starter_missing")

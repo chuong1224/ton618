@@ -105,7 +105,7 @@ def _registry_version_key(tag):
     return nums or (-1,)
 
 
-def store_pythonw_alias(path, isfile=None, localappdata=None):
+def store_pythonw_alias(path, isfile=None):
     """Đổi đường Store Python có số build sang app-exec alias ổn định nếu có thật.
 
     Registry của Microsoft Store trỏ vào ``Program Files/WindowsApps`` với version
@@ -117,7 +117,7 @@ def store_pythonw_alias(path, isfile=None, localappdata=None):
     package = os.path.basename(os.path.dirname(os.path.normpath(path or "")))
     match = re.match(r"^(PythonSoftwareFoundation\.Python\.[^_]+)_.+__([A-Za-z0-9]+)$",
                      package, re.I)
-    base = localappdata or os.environ.get("LOCALAPPDATA", "").strip()
+    base = os.environ.get("LOCALAPPDATA", "").strip()
     if not match or not base:
         return path
     family = match.group(1) + "_" + match.group(2)
@@ -301,13 +301,12 @@ def is_own_shortcut(path):
         return False
 
 
-def stale_shortcuts(name=APP_NAME, desktop=True, start_menu=True, dest_dir=None,
-                    old_names=None):
+def stale_shortcuts(name=APP_NAME, desktop=True, start_menu=True, dest_dir=None):
     """[(nhãn, đường dẫn .lnk)] mang TÊN CŨ (OLD_NAMES) nhưng vẫn là shortcut của app —
     tức đời trước để lại, phải dọn khi cài lại / gỡ. Chỉ trả file có thật và là của
     mình; tên cũ nào trùng tên đang cài thì bỏ qua (không tự dọn thứ mình sắp ghi)."""
     out = []
-    for old in (OLD_NAMES if old_names is None else old_names):
+    for old in OLD_NAMES:
         if old == name:
             continue
         for label, p in shortcut_paths(old, desktop, start_menu, dest_dir):

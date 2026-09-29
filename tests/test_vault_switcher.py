@@ -74,7 +74,19 @@ check("1 folder mat tra code not_found", missing_code == "not_found", missing_co
 # 2. Config lives outside vault and restores selection
 saved = VS.save_selection(external)
 check("2 config ghi active vault", saved["vault"] == os.path.realpath(external), saved)
-check("2 config nam ngoai vault", not os.path.realpath(CONFIG).startswith(os.path.realpath(external) + os.sep), CONFIG)
+# Contract that la gia tri MAC DINH (khong env): cau hinh nam o thu muc du lieu per-may,
+# khong trong vault nao (vault sync qua OneDrive; 2 may se de lua chon cua nhau). So
+# CONFIG do chinh test dat voi `external` thi luon dung - W426 bo phep so do.
+_cfg_env = os.environ.pop(VS.CONFIG_ENV)
+try:
+    _default_cfg = VS.config_path()
+finally:
+    os.environ[VS.CONFIG_ENV] = _cfg_env
+from activity_paths import local_data_dir
+check("2 config mac dinh nam trong thu muc du lieu per-may, ngoai vault",
+      os.path.dirname(_default_cfg) == os.path.normpath(local_data_dir())
+      and not os.path.normcase(_default_cfg).startswith(os.path.normcase(os.path.dirname(G3D)) + os.sep),
+      _default_cfg)
 ctx = VS.resolve_active_vault(app)
 check("2 resolve doc vault UI da luu", ctx["path"] == os.path.realpath(external), ctx)
 check("2 vault UI khong bi locked", ctx["locked"] is False, ctx)
@@ -97,22 +109,22 @@ class Result:
     returncode = 0
     stderr = ""
     stdout = external
+picker_calls = []
 def fake_runner(argv, **kwargs):
-    check("4 picker goi PowerShell STA", "-STA" in argv, argv)
-    check("4 picker truyen initial qua env", kwargs["env"].get("GRAPH3D_PICK_INITIAL") == other)
-    check("4 picker truyen HWND cua app foreground", kwargs["env"].get("GRAPH3D_PICK_OWNER_HWND") == "424242",
-          kwargs["env"].get("GRAPH3D_PICK_OWNER_HWND"))
+    picker_calls.append((argv, kwargs))
     return Result()
-original_foreground = getattr(VS, "foreground_window_handle", None)
-if original_foreground:
-    VS.foreground_window_handle = lambda platform=None, user32=None: 424242
+original_foreground = VS.foreground_window_handle
+VS.foreground_window_handle = lambda platform=None: 424242
 picked = VS.choose_folder(other, runner=fake_runner, platform="nt")
+argv0, kw0 = picker_calls[0] if picker_calls else ([], {"env": {}})
+check("4 picker goi PowerShell STA", "-STA" in argv0, argv0)
+check("4 picker truyen initial qua env", kw0["env"].get("GRAPH3D_PICK_INITIAL") == other)
+check("4 picker truyen HWND cua app foreground", kw0["env"].get("GRAPH3D_PICK_OWNER_HWND") == "424242",
+      kw0["env"].get("GRAPH3D_PICK_OWNER_HWND"))
 check("4 picker tra root da validate", picked == os.path.realpath(external), picked)
 Result.stdout = ""
 check("4 cancel tra None", VS.choose_folder(other, runner=fake_runner, platform="nt") is None)
-if original_foreground:
-    VS.foreground_window_handle = original_foreground
-check("4 co ham lay HWND foreground", callable(original_foreground))
+VS.foreground_window_handle = original_foreground
 check("4 PowerShell tao IWin32Window owner", "IWin32Window" in VS._POWERSHELL_PICKER and
       "GRAPH3D_PICK_OWNER_HWND" in VS._POWERSHELL_PICKER)
 check("4 FolderBrowserDialog ShowDialog voi owner", "ShowDialog($owner)" in VS._POWERSHELL_PICKER)
@@ -184,6 +196,48 @@ try:
     except urllib.error.HTTPError as exc:
         ping_status = exc.code
     check("5 logger khong provenance bi chan o vault ngoai", ping_status == 409, ping_status)
+finally:
+    try:
+        urllib.request.urlopen(base + "/shutdown", timeout=3).read()
+    except Exception:
+        pass
+    try:
+        proc.wait(timeout=8)
+    except subprocess.TimeoutExpired:
+        proc.kill()
+
+# 5b. W324: khang dinh "khong chay work.py cua vault duoc chon" phai do tren engine
+# MAC DINH. O ca 5 env GRAPH3D_WORKMAP_ENGINE de mat mac dinh, nen doi mac dinh sang
+# VAULT (dung lo thuc thi ma) van xanh (W426). Server nay khong dat env do; /work tra
+# 200/404/500 tuy may co engine tin cay hay khong, nhung sentinel KHONG duoc sinh.
+port = free_port()
+env = os.environ.copy()
+env[VS.VAULT_ENV] = external
+env[VS.LOCKED_ENV] = "0"
+env.pop("GRAPH3D_WORKMAP_ENGINE", None)
+env["PYTHONDONTWRITEBYTECODE"] = "1"
+proc = subprocess.Popen([sys.executable, os.path.join(G3D, "serve.py"),
+                         "--port", str(port), "--no-open"],
+                        cwd=G3D, env=env, stdout=subprocess.DEVNULL,
+                        stderr=subprocess.DEVNULL)
+base = "http://127.0.0.1:%d" % port
+try:
+    for _ in range(50):
+        try:
+            get_json(base + "/health")
+            break
+        except Exception:
+            time.sleep(0.15)
+    try:
+        with urllib.request.urlopen(base + "/work", timeout=8) as r:
+            work_default = r.status
+    except urllib.error.HTTPError as exc:
+        work_default = exc.code
+    except Exception as exc:                 # noqa: BLE001 - server khong len
+        work_default = repr(exc)
+    check("5b engine MAC DINH khong import work.py cua vault duoc chon",
+          work_default in (200, 404, 500) and not os.path.exists(sentinel),
+          (work_default, os.path.exists(sentinel)))
 finally:
     try:
         urllib.request.urlopen(base + "/shutdown", timeout=3).read()

@@ -598,10 +598,9 @@ def build_taxonomy(docs, list_n=40, pair_cap=TAXONOMY_PAIR_CAP):
 _TAXONOMY_DOC_CACHE = {"signature": None, "docs": None, "taxonomy": None}
 
 
-def read_taxonomy_docs(graph, vault=VAULT, exclude=None):
+def read_taxonomy_docs(graph, vault=VAULT):
     """Doc dung tap note cua graph va cache theo (path, mtime_ns, size)."""
-    skip = self_excludes() if exclude is None else set(exclude)
-    notes, _adj, _hubs = note_graph(graph, exclude=skip)
+    notes, _adj, _hubs = note_graph(graph, exclude=self_excludes())
     vault = os.path.abspath(vault)
     rows = []
     for rel in sorted(notes):
@@ -627,9 +626,9 @@ def read_taxonomy_docs(graph, vault=VAULT, exclude=None):
     return dict(docs)
 
 
-def measure_taxonomy(graph, vault=VAULT, exclude=None):
+def measure_taxonomy(graph, vault=VAULT):
     """I/O + cache cho server/CLI; cung signature voi cache doc markdown."""
-    docs = read_taxonomy_docs(graph, vault=vault, exclude=exclude)
+    docs = read_taxonomy_docs(graph, vault=vault)
     if _TAXONOMY_DOC_CACHE["taxonomy"] is None:
         _TAXONOMY_DOC_CACHE["taxonomy"] = build_taxonomy(docs)
     return _TAXONOMY_DOC_CACHE["taxonomy"]
@@ -637,8 +636,7 @@ def measure_taxonomy(graph, vault=VAULT, exclude=None):
 
 def build_insight(events, graph, heat_notes=None, heat_meta=None, now=None,
                   days=DEFAULT_DAYS, cold_days=DEFAULT_COLD, top_n=12, list_n=40,
-                  exclude=None, taxonomy_docs=None, taxonomy_result=None,
-                  chains=None):
+                  taxonomy_result=None, chains=None):
     """Ảnh chụp sức khoẻ truy xuất của vault.
 
     HÀM THUẦN: không đọc đĩa, không lấy giờ ẩn (`now` truyền vào) → test được bằng
@@ -647,10 +645,9 @@ def build_insight(events, graph, heat_notes=None, heat_meta=None, now=None,
       graph      — dict /graph-data (nodes/links/meta)
       heat_notes — {rel: {total, read, search, edit, first, last, agents}} đã gộp 2 máy
       heat_meta  — {since, updated, machines} của store heat (để in cửa sổ dữ liệu)
-      exclude    — note loại khỏi phép đo; mặc định = self_excludes() (note báo cáo
-                   do chính module sinh); truyền set() để đo trọn vault không loại gì
-      taxonomy_docs — {rel: markdown}; None = caller chưa cấp nội dung, B3/B4 unavailable
-      taxonomy_result — kết quả build_taxonomy đã cache; ưu tiên hơn taxonomy_docs
+      taxonomy_result — kết quả build_taxonomy (measure_taxonomy đã cache); None =
+                   caller chưa cấp nội dung markdown, B3/B4 unavailable
+    Note báo cáo do chính module sinh (self_excludes) luôn bị loại khỏi phép đo.
       chains      — output canonical của serve.build_chains; chỉ dùng để rút tín hiệu
                     đọc-lặp/chuỗi-dài, không tự gom chain lần hai
 
@@ -665,7 +662,7 @@ def build_insight(events, graph, heat_notes=None, heat_meta=None, now=None,
     days = max(1, int(days))
     cold_days = max(1, int(cold_days))
     heat_meta = heat_meta or {}
-    skip = self_excludes() if exclude is None else set(exclude)
+    skip = self_excludes()
     # Áp cùng phạm vi cho G, J và H. Chỉ lọc node graph là chưa đủ: event/heat của
     # file nháp vẫn có thể lọt vào bảng "nóng nhất" và cửa sổ dữ liệu.
     heat_notes = {rel: row for rel, row in (heat_notes or {}).items()
@@ -765,7 +762,7 @@ def build_insight(events, graph, heat_notes=None, heat_meta=None, now=None,
     ts_all = [t for t in (_ts(e) for e in evs) if t]
     meta = graph.get("meta", {})
     n_notes = len(notes)
-    taxonomy = taxonomy_result or build_taxonomy(taxonomy_docs or {}, list_n=list_n)
+    taxonomy = taxonomy_result or build_taxonomy({}, list_n=list_n)
     friction = build_friction(chains, notes, cur_from, list_n=list_n)
     out = {
         "generated": now,

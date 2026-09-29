@@ -69,7 +69,6 @@ ui = read(os.path.join(SRC, "ui.js"))
 main = read(os.path.join(SRC, "main.js"))
 act = read(os.path.join(SRC, "activity.js"))
 css = read(os.path.join(SRC, "style.css"))
-i18n = read(os.path.join(SRC, "i18n.js"))
 vault_js = read(os.path.join(SRC, "vault-switcher.js"))
 state_js = read(os.path.join(SRC, "state.js"))
 finder_js = read(os.path.join(SRC, "finder.js"))
@@ -86,25 +85,16 @@ m = re.search(r'<div class="sub">(.*?)</div>', html, re.S)
 check("2 nut nam trong div.sub (cung dong voi so version)",
       bool(m) and 'id="reload-b"' in m.group(1))
 
-# --- 3: nut co khoa dich cho ca title lan aria ---
-btn = re.search(r'<button[^>]*id="reload-b"[^>]*>', html)
-btn = btn.group(0) if btn else ""
-check("3 nut co data-i18n-title=reload.tip", 'data-i18n-title="reload.tip"' in btn, btn)
-check("3 nut co data-i18n-aria=reload.aria", 'data-i18n-aria="reload.aria"' in btn, btn)
-
-# --- 4: 3 khoa co du o CA HAI ngon ngu ---
-# test_i18n gac "khoa dung phai co that" va "khong khoa chet"; day gac dung 3 khoa nay
-# ton tai o ca vi lan en — thieu ben nao la nut noi nua Viet nua Anh.
-parts = i18n.split("\n  en: {")
-vi_block = parts[0]
-en_block = parts[1] if len(parts) > 1 else ""
-for k in ("reload.tip", "reload.tip.new", "reload.aria"):
-    check("4 khoa %s co ca vi lan en" % k,
-          ("'%s'" % k) in vi_block and ("'%s'" % k) in en_block)
+# --- 3/4 (W426): khoa dich cua nut (title/aria + du VI/EN) do test_i18n gac tong quat
+# (#2 VI==EN, #3 khoa markup - ca data-i18n-title/aria - co that, #4 tr() co that,
+# #10 attribute tieng Viet phai co khoa i18n).
 
 # --- 5: hanh vi bam = nap lai trang ---
 check("5 ui.js export initReload", "export function initReload" in ui)
-check("5 initReload goi location.reload()", "location.reload()" in ui)
+init_reload = re.search(r"export function initReload\(\)\s*\{(.*?)\n\}", ui, re.S)
+check("5 initReload goi location.reload() trong than ham (khong tinh chu thich)",
+      bool(init_reload) and "location.reload()" in init_reload.group(1),
+      init_reload.group(1) if init_reload else None)
 
 # --- 6: main.js that su NOI nut vao (khai ma khong goi = nut chet) ---
 imported = re.search(r"import \{(.*?)\} from '\./ui\.js'", main, re.S)
@@ -185,25 +175,22 @@ check("14 module POST /vault-pick", "fetch('/vault-pick', { method: 'POST' })" i
 check("14 client doi dung vault_id va boot_id moi", "h.vault_id === targetId" in vault_js and
       "h.boot_id !== oldBoot" in vault_js)
 check("14 --vault/demo khoa nut UI", "b.disabled = S.vaultLocked || cls === 'busy'" in vault_js)
-for k in ("vault.tip", "vault.locked", "vault.picking", "vault.switching",
-          "vault.timeout", "vault.error"):
-    check("14 khoa %s co ca vi lan en" % k,
-          ("'%s'" % k) in vi_block and ("'%s'" % k) in en_block)
 
 # --- 15: picker native phải có feedback lớn, không để user tưởng app treo ---
-check("15 index co lop bao picker dang mo", html.count('id="vault-pick-wait"') == 1 and
-      'role="status"' in html, html.count('id="vault-pick-wait"'))
+pick_wait = re.findall(r'<[^>]*id="vault-pick-wait"[^>]*>', html)
+check("15 index co dung 1 lop bao picker dang mo, mang role=status",
+      len(pick_wait) == 1 and 'role="status"' in pick_wait[0], pick_wait)
 check("15 overlay picker phu viewport va tren moi chrome", "#vault-pick-wait" in css and
       "position: fixed" in css_block(css, "#vault-pick-wait") and
       "z-index: 10000" in css_block(css, "#vault-pick-wait"))
+pick_order = (vault_js.find("showPickerWait('picking')"),
+              vault_js.find("requestAnimationFrame"),
+              vault_js.find("fetch('/vault-pick'"))
 check("15 UI bat overlay truoc POST va cho browser ve mot frame",
-      vault_js.find("showPickerWait('picking')") < vault_js.find("requestAnimationFrame") <
-      vault_js.find("fetch('/vault-pick'"), vault_js)
-check("15 cancel va loi deu tat overlay", vault_js.count("hidePickerWait()") >= 3,
-      vault_js.count("hidePickerWait()"))
-for k in ("vault.picker.open", "vault.picker.hint", "vault.picker.switching"):
-    check("15 khoa %s co ca vi lan en" % k,
-          ("'%s'" % k) in vi_block and ("'%s'" % k) in en_block)
+      0 <= pick_order[0] < pick_order[1] < pick_order[2], pick_order)
+hide_calls = vault_js.count("hidePickerWait()") - vault_js.count("function hidePickerWait()")
+check("15 cancel va loi deu tat overlay (>=3 loi goi, khong tinh dinh nghia)",
+      hide_calls >= 3, hide_calls)
 
 print("\nTONG KET test_reload: %s" % (("FAIL %d: %s" % (len(fails), ", ".join(fails))) if fails else "ALL PASS"))
 sys.exit(1 if fails else 0)

@@ -113,10 +113,5 @@ init_body = ck_src.split("export function initCockpit")[-1]
 check("C initCockpit nap danh sach ngay luc boot (populateDays)",
       "populateDays" in init_body and "/timeline" in init_body)
 
-# ---- khong hoi quy: cac ham loi serve van nguyen ----
-for fn in ("vault_file", "read_activity_all", "read_all_events", "build_chains",
-           "search_notes", "day_key", "list_days", "events_for_day", "build_dashboard"):
-    check("C serve.%s ton tai" % fn, hasattr(SV, fn))
-
 print("\nTONG KET:", ("FAIL %d muc" % len(fails)) if fails else "ALL PASS")
 sys.exit(1 if fails else 0)

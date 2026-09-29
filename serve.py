@@ -163,6 +163,25 @@ MIME = {".html": "text/html; charset=utf-8",
         ".md": "text/markdown; charset=utf-8", ".txt": "text/plain; charset=utf-8"}
 
 
+APP_STATIC_DIRS = ("src", "vendor")
+
+
+def app_static_file(url_path):
+    """Đường file tĩnh của APP cho `/src/*` và `/vendor/*`, hoặc None.
+
+    Prefix phải kèm os.sep (P0.4) — thiếu thì thư mục anh em `vendor_old`/`src2` cũng
+    lọt whitelist qua `/vendor/../vendor_old/x`. Chỉ file có thật mới được phục vụ."""
+    for d in APP_STATIC_DIRS:
+        if not url_path.startswith("/%s/" % d):
+            continue
+        full = os.path.join(HERE, os.path.normpath(url_path.lstrip("/")))
+        root = os.path.normcase(os.path.join(HERE, d)) + os.sep
+        if os.path.normcase(full).startswith(root) and os.path.isfile(full):
+            return full
+        return None
+    return None
+
+
 def vault_file(rel, exts=None):
     """Resolve đường dẫn tương đối ('/'-sep, từ query ?path=) → file THẬT trong vault.
     Trả None khi: rỗng / thoát vault (.., tuyệt đối, ổ đĩa) / đi vào dot-folder
@@ -307,7 +326,7 @@ def _search_docs(vault):
     return docs
 
 
-def search_notes(q, limit=20, vault=None):
+def search_notes(q, limit=20):
     """Full-text search cho Finder: AND mọi từ (mỗi từ phải xuất hiện trong TÊN
     hoặc THÂN note). Điểm = khớp tên file nặng hơn khớp thân (người tìm thường
     nhớ tên); snippet cắt quanh vị trí khớp đầu tiên, trả TEXT GỐC còn dấu."""
@@ -315,7 +334,7 @@ def search_notes(q, limit=20, vault=None):
     if not terms:
         return []
     out = []
-    for d in _search_docs(vault or VAULT):
+    for d in _search_docs(VAULT):
         score, hits, first = 0, 0, -1
         for t in terms:
             cnt = d["text_f"].count(t)
@@ -1085,28 +1104,14 @@ class Handler(BaseHTTPRequestHandler):
                 })
             return
 
-        if path.startswith("/src/"):
-            # ES modules + CSS của UI — đọc thẳng từ đĩa mỗi request (no-store qua _send,
-            # sửa module chỉ cần F5). Cùng phép kiểm prefix + os.sep như /vendor/.
-            rel = os.path.normpath(path.lstrip("/"))
-            full = os.path.join(HERE, rel)
-            src_root = os.path.normcase(os.path.join(HERE, "src")) + os.sep
-            if os.path.normcase(full).startswith(src_root) and os.path.isfile(full):
-                ext = os.path.splitext(full)[1].lower()
-                with open(full, "rb") as f:
-                    self._send(200, f.read(), MIME.get(ext, "application/octet-stream"))
-                return
-
-        if path.startswith("/vendor/"):
-            rel = os.path.normpath(path.lstrip("/"))
-            full = os.path.join(HERE, rel)
-            # Prefix phải kèm os.sep — thiếu thì folder anh em "vendor_old"/"vendor2" cũng lọt whitelist
-            vendor_root = os.path.normcase(os.path.join(HERE, "vendor")) + os.sep
-            if os.path.normcase(full).startswith(vendor_root) and os.path.isfile(full):
-                ext = os.path.splitext(full)[1].lower()
-                with open(full, "rb") as f:
-                    self._send(200, f.read(), MIME.get(ext, "application/octet-stream"))
-                return
+        # /src/* = ES modules + CSS của UI — đọc thẳng từ đĩa mỗi request (no-store qua
+        # _send, sửa module chỉ cần F5); /vendor/* = thư viện tĩnh.
+        full = app_static_file(path)
+        if full:
+            ext = os.path.splitext(full)[1].lower()
+            with open(full, "rb") as f:
+                self._send(200, f.read(), MIME.get(ext, "application/octet-stream"))
+            return
 
         self._send(404, b'{"error":"not found"}')
 

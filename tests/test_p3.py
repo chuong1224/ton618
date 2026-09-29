@@ -29,7 +29,11 @@ REL = "Index.md"   # note that ton tai trong vault
 
 # t1: bump dau tien -> chi ghi PENDING, store chua dung toi
 LA.append_events("read", [REL])
-check("t1a pending duoc tao (ngoai vault)", os.path.exists(PENDING))
+# "ngoai vault" = pending nam canh log activity per-may (khong sync), khong nam trong
+# vault/.graph3d - doi sang thu muc sync thi 2 may ghi de pending cua nhau.
+check("t1a pending duoc tao canh log per-may (ngoai vault)", os.path.exists(PENDING)
+      and os.path.dirname(os.path.abspath(PENDING)) == os.path.dirname(os.path.abspath(LOG)),
+      PENDING)
 check("t1b store CHUA bi ghi (khong churn per-call)", not os.path.exists(STORE))
 
 # t2: gia hoa pending (>60s) -> bump ke tiep flush gop vao store
@@ -94,8 +98,14 @@ e3 = SV.read_all_events()
 check("t4b log doi -> cache invalidate, +1 event", (e3 is not e2) and len(e3) == len(e2) + 1,
       (len(e2), len(e3)))
 
-# t5: server keep-alive attr
-check("t5 Handler HTTP/1.1 + timeout", SV.Handler.protocol_version == "HTTP/1.1" and SV.Handler.timeout == 75)
+# t5: server keep-alive - HTTP/1.1 de 3 vong poll UI tai dung ket noi; timeout phai co
+# (None = thread treo vo han cho request ke) va dai hon chu ky poll 4s (ngan hon thi
+# keep-alive vo nghia). Khong ghim con so cu the.
+t5_to = SV.Handler.timeout
+check("t5 Handler HTTP/1.1 + timeout idle > chu ky poll 4s",
+      SV.Handler.protocol_version == "HTTP/1.1"
+      and isinstance(t5_to, (int, float)) and t5_to > 4,
+      (SV.Handler.protocol_version, t5_to))
 
 for f in (LOG, STORE, JOURNAL, PENDING, LOG + ".lock", STORE + ".lock"):
     try: os.remove(f)

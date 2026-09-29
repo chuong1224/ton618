@@ -47,10 +47,7 @@ html = read(os.path.join(G3D, "index.html"))
 i18n = read(os.path.join(SRC, "i18n.js"))
 mod = read(os.path.join(G3D, "update_check.py"))
 
-# --- 1: khai bao vao danh sach file app (2j) va danh sach can-restart (2k) ---
-check("1 update_check.py nam trong APP_PY", "update_check.py" in activity_paths.APP_PY)
-check("1 update_check.py nam trong _VERSION_FILES (serve.py import luc nap)",
-      "update_check.py" in activity_paths._VERSION_FILES)
+# --- 1: khai bao vao APP_PY/_VERSION_FILES do selfcheck 2j/2k gac tong quat (W426) ---
 
 # --- 2: CHUA dong y => TUYET DOI khong goi mang ---
 _tmp = os.path.join(SCRATCH, "update-state")
@@ -159,17 +156,18 @@ check("7b co spawn tien trinh trong module (may gac khong rong)", len(_spans) >=
 _naked = [s.strip()[:60] for s in _spans if "no_window_kwargs()" not in s]
 check("7b moi cho spawn deu truyen no_window_kwargs()", not _naked, _naked)
 _tmp_prefix = "kb-test-update-"
+# Thu muc tam do TemporaryDirectory so huu vong doi (W293) - khong khang dinh lai hanh vi
+# cua stdlib (W426).
 with tempfile.TemporaryDirectory(prefix=_tmp_prefix, dir=SCRATCH) as _precheck_tmp:
-    check("7 thu muc tam precheck co prefix", os.path.basename(_precheck_tmp).startswith(_tmp_prefix), _precheck_tmp)
     ok, why = U.pull_precheck(_precheck_tmp)       # thu muc trong: khong phai repo
     check("7 thu muc khong phai repo thi tu choi", ok is False and why == "not_a_repo", (ok, why))
-check("7 thu muc tam precheck duoc don", not os.path.exists(_precheck_tmp), _precheck_tmp)
 
 with tempfile.TemporaryDirectory(prefix=_tmp_prefix, dir=SCRATCH) as _pull_tmp:
-    check("7 thu muc tam pull co prefix", os.path.basename(_pull_tmp).startswith(_tmp_prefix), _pull_tmp)
     res = U.pull(_pull_tmp)
-    check("7 pull() tu choi truoc khi chay git", res.get("ok") is False, res)
-check("7 thu muc tam pull duoc don", not os.path.exists(_pull_tmp), _pull_tmp)
+    # Ly do phai la not_a_repo (precheck chan): bo precheck thi `git pull` van chay
+    # va hong voi pull_failed/git_failed - ok False ma chua he "tu choi truoc".
+    check("7 pull() tu choi truoc khi chay git",
+          res.get("ok") is False and res.get("reason") == "not_a_repo", res)
 
 # --- 8: khong tu reload sau khi cap nhat (khong cuop tab dang doc) ---
 check("8 update.js khong tu goi location.reload()", "location.reload()" not in upd_js)
@@ -193,7 +191,13 @@ for _route in ("/update-consent", "/update-pull"):
 # --- 9: server co du 3 cua, va GET khong tu hoi mang ---
 for p in ('path == "/update"', 'path == "/update-consent"', 'path == "/update-pull"'):
     check("9 serve.py co route %s" % p.split('"')[1], p in serve)
-check("9 GET /update chi hoi mang khi co ?refresh=1", 'qs.get("refresh"' in serve)
+_upd = serve[serve.find('if path == "/update":'):]
+_upd = _upd[:_upd.find("\n        if path ==", 1)]
+_upd = "\n".join(l for l in _upd.splitlines() if not l.lstrip().startswith("#"))   # bo chu thich
+_gate = re.search(r'\n(\s*)if qs\.get\("refresh"[^\n]*== "1":\n((?:\1\s+[^\n]*\n)+)', _upd)
+check("9 GET /update chi hoi mang khi co ?refresh=1 (refresh() nam TRONG nhanh do)",
+      bool(_gate) and "update_check.refresh(" in _gate.group(2)
+      and _upd.count("update_check.refresh(") == 1, _upd[:400])
 
 # --- 10: TTL khong duoc ha xuong duoi 1 ngay (quota 60 req/gio theo IP) ---
 check("10 TTL >= 1 ngay", U.TTL >= 24 * 3600, U.TTL)
@@ -204,20 +208,26 @@ check("10 TTL >= 1 ngay", U.TTL >= 24 * 3600, U.TTL)
 # dang thieu ban. Nen so version phai bam duoc, va panel phai co nut doi y.
 check("10b so version bam duoc (id=app-ver)", 'id="app-ver"' in html)
 check("10b app-ver mo panel update", "'app-ver'" in upd_js)
-check("10b panel co nut doi y consent", 'id="upd-consent"' in html and "toggleConsent" in upd_js)
-check("10b nhan nut la HANH DONG (2 chieu bat/tat)",
-      "'upd.consent.on'" in i18n and "'upd.consent.off'" in i18n)
-check("10b tat kiem tra thi panel noi ro khong goi internet", "'upd.disabled'" in i18n)
+# Noi day: dong dinh nghia `function toggleConsent` khong duoc tinh (W426). Khoa dich
+# upd.consent.on/off + upd.disabled do test_i18n #2 (VI==EN) + #4 (khoa tr() co that) gac.
+check("10b panel co nut doi y consent (nut noi vao toggleConsent)",
+      'id="upd-consent"' in html
+      and re.search(r"\$\('upd-consent'\)\.onclick\s*=\s*toggleConsent\b", upd_js))
 
 # --- 11: badge nam CUNG DONG voi so version (bai hoc W43/W65) ---
 m = re.search(r'<div class="sub">(.*?)</div>', html, re.S)
 check("11 badge update nam trong div.sub", bool(m) and 'id="update-badge"' in m.group(1))
 
-# --- 12: 3 khoi khoa i18n co ca vi lan en ---
+# --- 12: khoa DONG upd.cant.<ly do> - test_i18n khong thay khoa ghep chuoi nen day la
+# may gac duy nhat. Ly do rut tu CHINH update_check.py (khong chep tay danh sach).
 parts = i18n.split("\n  en: {")
 vi_b, en_b = parts[0], (parts[1] if len(parts) > 1 else "")
-for k in ("upd.ask", "upd.behind", "upd.sum", "upd.pull", "upd.cant.no_remote", "upd.cant.dirty"):
-    check("12 khoa %s co ca vi lan en" % k, ("'%s'" % k) in vi_b and ("'%s'" % k) in en_b)
+_reasons = sorted(set(re.findall(r'return False, "(\w+)"', mod))
+                  | set(re.findall(r'"reason": "(\w+)"', mod)))
+check("12 rut duoc ly do tu update_check.py (may gac khong rong)", len(_reasons) >= 4, _reasons)
+_miss = [r for r in _reasons
+         if ("'upd.cant.%s'" % r) not in vi_b or ("'upd.cant.%s'" % r) not in en_b]
+check("12 moi ly do tu choi pull co khoa upd.cant.* o ca vi lan en", not _miss, _miss)
 
 # --- 13: main.js that su noi module vao ---
 check("13 main.js goi initUpdate()", "initUpdate();" in main_js)

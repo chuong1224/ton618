@@ -49,7 +49,6 @@ check("J1a journal nam trong GRAPH3D_JOURNAL_DIR", os.path.dirname(JP) == os.pat
 check("J1b ten file activity-<HOST>.jsonl", os.path.basename(JP) == "activity-%s.jsonl" % HOST, JP)
 check("J1c journal_host parse nguoc", AP.journal_host(JP) == HOST, AP.journal_host(JP))
 check("J1d journal_host ten may co dau -", AP.journal_host("activity-CPU-12-A.jsonl") == "CPU-12-A")
-check("J1e journal scratch nam trong run-id rieng", os.path.commonpath([JDIR, SCRATCH]) == os.path.normpath(SCRATCH), JDIR)
 
 # ---- J2: seed backfill lan dau — journal chua co thi chep log local vao truoc ----
 now = time.time()
@@ -77,22 +76,20 @@ check("J4b rotate giu <= KEEP_LINES dong, dong cuoi con nguyen",
       len(rows) <= LA.JOURNAL_KEEP_LINES and rows[-1]["file"] == "cuoi.md",
       (len(rows), rows[-1].get("file") if rows else None))
 
-# ---- J5: flush pending -> ghi CA store heat lan journal (mot diem flush) ----
+# ---- J5: flush pending -> ghi journal cung lo (mot diem flush). Phan store heat va
+# xoa pending do test_p3 t2a/t2b gac tren store that; o day chi cach ly store/lock.
 os.remove(JP)
 open(LOG, "w").close()
-applied = []
 orig_apply, orig_lock = LA._apply_events_to_store, LA._cum_locked
-LA._apply_events_to_store = lambda evs, now: applied.extend(evs)
+LA._apply_events_to_store = lambda evs, now: None
 LA._cum_locked = lambda work: work()               # khong dung store/lock that trong vault
 try:
     with open(LA.PENDING_FILE, "w", encoding="utf-8", newline="\n") as f:
         f.write(json.dumps(ev(now, "Flush.md")) + "\n")
     LA._flush_pending_into_store(now)
-    check("J5a flush van cong store heat", [e["file"] for e in applied] == ["Flush.md"], applied)
     check("J5b flush ghi journal cung lo", os.path.exists(JP)
           and [r["file"] for r in jlines(JP)] == ["Flush.md"],
           jlines(JP) if os.path.exists(JP) else None)
-    check("J5c pending da xoa", not os.path.exists(LA.PENDING_FILE))
 finally:
     LA._apply_events_to_store, LA._cum_locked = orig_apply, orig_lock
 

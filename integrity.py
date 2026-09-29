@@ -122,6 +122,7 @@ FENCE_OPEN_RE = re.compile(r"^ {0,3}(`{3,}|~{3,})(.*)$")
 MEDIA_EXTS = build_graph_data.IMG_EXTS | build_graph_data.VIDEO_EXTS
 ATTACH_DIR = "attachments"
 LIST_N = 40          # trần danh sách mỗi check (UI/console hiện đầu danh sách, `total` là số thật)
+PARSER_BASIC = "parser tối thiểu của app"   # rules.parser khi vault không có vault_rules.py
 
 CHECKS = [
     ("link", "Wikilink gãy", "structure",
@@ -401,7 +402,7 @@ def load_rules(rules_dir=None):
     # — hết cảnh mỗi bên một regex). Vault không có file đó (bản public clone ra ngoài)
     # thì rơi về parser tối thiểu ngay trong module: audit W41 phát hiện 5 đèn contract
     # KHÔNG THỂ bật ở bản public vì đòi một script chỉ tồn tại trong vault này.
-    mod, parse_fm, engine = None, _parse_frontmatter_basic, "parser tối thiểu của app"
+    mod, parse_fm, engine = None, _parse_frontmatter_basic, PARSER_BASIC
     if os.path.isfile(py):
         try:
             spec = importlib.util.spec_from_file_location("kb_vault_rules", py)
@@ -435,9 +436,9 @@ def load_rules(rules_dir=None):
 
 # ------------------------------------------------------------------ phép tính
 
-def build_integrity(scan, rules=None, rules_info=None, now=None, list_n=LIST_N,
+def build_integrity(scan, rules=None, rules_info=None, list_n=LIST_N,
                     yaml_loader=_YAML_DEFAULT, yaml_reason=""):
-    """Ảnh chụp toàn vẹn vault — HÀM THUẦN (không đọc đĩa, `now` truyền vào → test được).
+    """Ảnh chụp toàn vẹn vault — HÀM THUẦN (không đọc đĩa; chỉ `generated` lấy giờ đo).
 
     scan       — kết quả scan_vault()
     rules      — {} hoặc {mandatory_frontmatter, binary_digest_ext, tag_vocabulary,
@@ -446,7 +447,7 @@ def build_integrity(scan, rules=None, rules_info=None, now=None, list_n=LIST_N,
     yaml_loader — mặc định `yaml.safe_load`; truyền None trong test để mô phỏng thiếu
                   PyYAML. Thiếu validator là trạng thái DEGRADED, không được báo sạch.
     """
-    now = float(now if now is not None else time.time())
+    now = time.time()
     notes, files = scan["notes"], scan["files"]
     rules = rules or {}
     mandatory = list(rules.get("mandatory_frontmatter") or [])
@@ -758,7 +759,7 @@ def _owner_note(folder, notes_by_folder, notes):
 _cache = {"key": None, "data": None}
 
 
-def collect(vault=VAULT, rules_dir=None, list_n=LIST_N, use_cache=True, now=None):
+def collect(vault=VAULT, rules_dir=None, list_n=LIST_N, use_cache=True):
     """Đo toàn vẹn vault (I/O + phép tính). Cache theo (chữ ký file, mtime nguồn luật)
     — mở section/overlay liên tiếp không quét lại; sửa note là lần sau đo lại ngay."""
     sig = vault_signature(vault)
@@ -776,7 +777,7 @@ def collect(vault=VAULT, rules_dir=None, list_n=LIST_N, use_cache=True, now=None
         return _cache["data"]
     rules, info = load_rules(rules_dir)
     data = build_integrity(scan_vault(vault, sig), rules=rules, rules_info=info,
-                           now=now, list_n=list_n)
+                           list_n=list_n)
     _cache.update(key=key, data=data)
     return data
 

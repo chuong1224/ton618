@@ -16,6 +16,7 @@ Chay:  python test_selfcheck.py
 Exit:  0 = ALL PASS · 1 = co FAIL
 """
 import glob
+import io
 import os
 import subprocess
 import sys
@@ -62,16 +63,11 @@ check("A6 contract 2m bat kieu khai CU (in SKIP tran)", bool(SC.SKIP_TRAN_RE.sea
 check("A7 contract 2m KHONG bat kieu khai moi", not SC.SKIP_TRAN_RE.search(mau_moi))
 
 # ---- B. Bon nhan, khong duoc nhap nhem ----
-check("B1 xanh + do tron = PASS", SC.phan_loai(res(True, "ALL PASS\n")) == "PASS")
-check("B2 xanh + co muc bo qua = PASS* (khong phai PASS)",
-      SC.phan_loai(res(True, "[SKIP] khong co node\nALL PASS\n")) == "PASS*")
-check("B3 do that = FAIL", SC.phan_loai(res(False, "FAIL 2 muc\n")) == "FAIL")
+# PASS / PASS* / FAIL va xanh-gia-thieu-lib do D1-D4 gac qua process con that (W426 gop
+# B1/B2/B3/B5 vao do). O day chi con chieu D khong cham: no ngay luc import.
 # W218 chieu 1: no ngay luc import.
 check("B4 do vi thieu thu vien = THIEU-LIB, KHONG phai FAIL",
       SC.phan_loai(res(False, "ModuleNotFoundError: No module named 'yaml'\n")) == "THIEU-LIB")
-# W218 chieu 2 — kieu nguy hiem hon: bat ImportError roi [SKIP] va exit 0.
-check("B5 XANH GIA vi thieu thu vien = THIEU-LIB, KHONG phai PASS*",
-      SC.phan_loai(res(True, "[SKIP] bo qua (No module named 'docx')\n")) == "THIEU-LIB")
 check("B6 doc dung ten module thieu o ca hai chieu",
       SC.thieu_module(res(False, "No module named 'yaml.parser'\n")) == "yaml"
       and SC.thieu_module(res(True, "[SKIP] thieu (No module named 'docx')\n")) == "docx"
@@ -109,12 +105,9 @@ for ten, body in TOYS.items():
 
 
 def chay_nhu_lop3(ten):
-    """Copy dung cach lop3_unit goi process con — doi mot chu la phep do het gia tri."""
-    r = subprocess.run([sys.executable, os.path.join(TOY_DIR, ten)],
-                       capture_output=True, text=True, encoding="utf-8",
-                       errors="replace", timeout=120, cwd=TOY_DIR,
-                       env=dict(os.environ, PYTHONIOENCODING="utf-8"))
-    return {"test": ten, "ok": r.returncode == 0, "output": r.stdout + r.stderr}
+    """Goi CHINH SC.chay_bo — ham lop3_unit dung. Truoc W426 day la BAN CHEP loi goi,
+    nen xoa PYTHONIOENCODING khoi lop 3 thi D5 van xanh."""
+    return SC.chay_bo(ten, os.path.join(TOY_DIR, ten))
 
 
 d_pass, d_skip, d_gia, d_do = (chay_nhu_lop3(t) for t in
@@ -127,7 +120,15 @@ check("D3 exit 0 nhung thieu thu vien -> THIEU-LIB (day la ca 'xanh gia' cua W22
       SC.phan_loai(d_gia) == "THIEU-LIB"
       and SC.thieu_module(d_gia) == "khong_he_ton_tai_w222", d_gia["output"])
 check("D4 do that -> FAIL", SC.phan_loai(d_do) == "FAIL", d_do["output"])
-d_dau = chay_nhu_lop3("toy_dau.py")
+# Chay trong selfcheck thi process nay DA thua ke PYTHONIOENCODING tu cha, nen chay_bo
+# bo dong ep encoding van xanh (W426 do bang mutation). Go bien do (va PYTHONUTF8) de
+# production phai TU ep, dung canh selfcheck chay tu mot shell tran.
+_enc_saved = {k: os.environ.pop(k) for k in ("PYTHONIOENCODING", "PYTHONUTF8")
+              if k in os.environ}
+try:
+    d_dau = chay_nhu_lop3("toy_dau.py")
+finally:
+    os.environ.update(_enc_saved)
 check("D5 ly do co em-dash ve nguyen chu, khong hoa U+FFFD (lo crash 16/08/2026)",
       SC.bo_qua(d_dau) == ["R toan JS — may khong co node"], d_dau["output"])
 # Ngoai ra cha phai in duoc no ra stdout cua CHINH minh du encoding la gi.
@@ -141,21 +142,39 @@ except UnicodeEncodeError:
 check("D6 an_toan() cho ra chuoi stdout hien tai ma hoa duoc (%s)" % enc, in_duoc)
 check("D7 an_toan() khong dung toi chuoi ASCII", SC.an_toan("plain ascii") == "plain ascii")
 
-# ---- E. Ban than runner phai khai bao va dem, khong chi in ----
+# ---- E. Tong ket + ma thoat cua runner: bang case tren ham thuan tong_ket ----
+# Truoc W426 nhom nay grep nguyen van __main__ (W239 tung do oan E3 khi them dieu kien
+# thoat, con E5 thi viet `skips or ...` la lot). Nay goi thang ham __main__ dung.
 src_sc = SC.read(os.path.join(os.path.dirname(os.path.abspath(__file__)), "selfcheck.py"))
-check("E1 selfcheck co so dem muc bo qua rieng (khong lan vao `fails`)",
-      "skips = []" in src_sc and "skips.append" in src_sc)
-check("E2 muc bo qua di vao TONG KET, khong nam mot minh o dong ghi chu",
-      "BO QUA %d muc" in src_sc)
-check("E3 THIEU-LIB chan, nhung KHONG bi goi ten la FAIL (W218)",
-      'elif nhan == "FAIL":' in src_sc
-      and "sys.exit(1 if (fails or thieu_lib or chan_vung_phu) else 0)" in src_sc
-      and "CHUA DO DUOC %d bo vi thieu thu vien" in src_sc)
+k_sach = SC.tong_ket([], {}, [], 7, 0, False)
+k_skip = SC.tong_ket([], {}, ["test_x.py: khong co node"], 7, 0, False)
+k_lib = SC.tong_ket([], {"test_y.py": "yaml"}, [], 7, 0, False)
+k_fail = SC.tong_ket(["3 test_z.py (0.1s)"], {}, [], 7, 0, False)
+k_tut = SC.tong_ket([], {}, [], 5, 1, True)
+k_tut_ok = SC.tong_ket([], {}, [], 5, 1, False)
+check("E1 xanh tron -> ALL PASS, exit 0", k_sach[1] == 0 and k_sach[0].startswith("ALL PASS"), k_sach)
+check("E2 muc bo qua di vao TONG KET (BO QUA n muc), khong lan vao FAIL",
+      "BO QUA 1 muc" in k_skip[0] and "FAIL" not in k_skip[0], k_skip)
 check("E5 PASS* KHONG chan (may khong co node thi sua code cung khong het)",
-      "skips.append" in src_sc and "or skips" not in src_sc)
-# Chinh selfcheck cung phai dung marker cho nhanh 2b cua no.
+      k_skip[1] == 0, k_skip)
+check("E3 THIEU-LIB chan, nhung KHONG bi goi ten la FAIL (W218)",
+      k_lib[1] == 1 and "CHUA DO DUOC 1 bo" in k_lib[0] and "FAIL" not in k_lib[0], k_lib)
+check("E3b FAIL chan va goi dung ten", k_fail[1] == 1 and k_fail[0].startswith("FAIL 1 muc"), k_fail)
+check("E3c tut vung phu CHUA chap nhan chan; da chap nhan thi khong (W239)",
+      k_tut[1] == 1 and k_tut_ok[1] == 0 and "TUT VUNG PHU 1 muc" in k_tut[0],
+      (k_tut, k_tut_ok))
+# Chinh selfcheck khai bo qua cua no (nhanh 2b) bang marker chung: chay SC.skip that, doc
+# lai bang dung bo doc cua lop 3.
+_buf, _real_out = io.StringIO(), sys.stdout
+sys.stdout = _buf
+try:
+    SC.skip("E4 thu marker")
+finally:
+    sys.stdout = _real_out
+    if SC.skips and SC.skips[-1] == "E4 thu marker":
+        SC.skips.pop()
 check("E4 selfcheck khai bo qua cua chinh no bang marker chung",
-      'an_toan("[SKIP] " + ly_do)' in src_sc)
+      SC.bo_qua(res(True, _buf.getvalue())) == ["E4 thu marker"], _buf.getvalue())
 
 # ---- F. Hai ban logic tach roi phai khong troi nhau ----
 # Ban goc song ben may gac tooling cua vault. Tach roi la CO Y (ban public clone ra ngoai

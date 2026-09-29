@@ -269,7 +269,7 @@ check("1 mien 3 note (_Meta + 2 gate_ignore), kiem 18",
       (rep["vault"]["ignored"], rep["vault"]["checked"]) == (3, 18), rep["vault"])
 
 # --- check cau truc ---
-check("2 wikilink gay = 2 (Beta + van xuoi sau code fence)", C["link"]["total"] == 2,
+check("2 wikilink gay = 2 (Beta + van xuoi sau code fence; link trong bang `[[Note\\|alias]]` KHONG bi bao - audit W41)", C["link"]["total"] == 2,
       C["link"]["list"])
 check("2 wikilink gay chi ra dung file + so dong",
       C["link"]["list"] and C["link"]["list"][0]["file"] == "Work/Beta/Beta.md"
@@ -285,14 +285,11 @@ check("2 anchor lech = 1 (Alpha#Khong co heading nay)", C["anchor"]["total"] == 
       C["anchor"]["list"])
 check("2 nhung gay = 1 (Gamma -> mat-tieu.png)", C["embed"]["total"] == 1,
       C["embed"]["list"])
-check("2 anh mo coi = 2 (orphan.png + code-only.png chi duoc nhac trong code)",
+check("2 anh mo coi = 2 (orphan.png + code-only.png chi duoc nhac trong code; wiki.png/md.png nhac kieu [[x.png]]/markdown KHONG mo coi)",
       C["orphan"]["total"] == 2
       and {os.path.basename(i["file"]) for i in C["orphan"]["list"]}
       == {"orphan.png", "code-only.png"},
       C["orphan"]["list"])
-check("2 anh nhac kieu [[x.png]] / markdown KHONG bi coi la mo coi",
-      all("wiki.png" not in i["file"] and "md.png" not in i["file"]
-          for i in C["orphan"]["list"]), C["orphan"]["list"])
 
 # --- check contract ---
 # W222: PyYAML la thu vien ben thu ba DUY NHAT ma .graph3d can. Thieu no thi integrity
@@ -326,30 +323,23 @@ check("3 YAML vo khong bi parser dong tao them bao loi contract gia",
           for k in ("frontmatter", "tag", "index_tag", "title") for i in C[k]["list"]),
       {k: [i["file"] for i in C[k]["list"]]
        for k in ("frontmatter", "tag", "index_tag", "title")})
-check("3 thieu truong frontmatter = 1 (Gamma thieu aliases+summary)",
+check("3 thieu truong frontmatter = 1 (Gamma thieu aliases+summary; Eps tags YAML list nhieu dong KHONG bi bao)",
       C["frontmatter"]["total"] == 1
       and set(C["frontmatter"]["list"][0]["missing"]) == {"aliases", "summary"},
       C["frontmatter"]["list"])
-check("3 tags dang YAML list nhieu dong KHONG bi bao thieu",
-      all("Eps" not in i["file"] for i in C["frontmatter"]["list"]), C["frontmatter"]["list"])
-check("3 file nhi phan chua mo nilon = 1 (Beta/data.xlsx)",
+check("3 file nhi phan chua mo nilon = 1 (Beta/data.xlsx; Eps da khai file_digest thi sach)",
       C["digest"]["total"] == 1 and C["digest"]["list"][0]["file"] == "Work/Beta/Beta.md",
       C["digest"]["list"])
-check("3 note da khai file_digest thi sach (Eps)",
-      all("Eps" not in i["file"] for i in C["digest"]["list"]), C["digest"]["list"])
 check("3 nguon luat bao da nap", rep["rules"]["loaded"] is True, rep["rules"])
 
 # --- W41: tag vocabulary · index 1 tag · title = ten file = H1 ---
-check("3b tag ngoai vocabulary = 1 (Theta: tag-tu-che)",
+check("3b tag ngoai vocabulary = 1 (Theta: tag-tu-che; tag trong vocabulary KHONG bi bao)",
       C["tag"]["total"] == 1 and C["tag"]["list"][0]["missing"] == ["tag-tu-che"],
-      C["tag"]["list"])
-check("3b tag trong vocabulary KHONG bi bao (JXM, hoai-niem, index)",
-      all("Eps" not in i["file"] and "Alpha" not in i["file"] for i in C["tag"]["list"]),
       C["tag"]["list"])
 check("3b index sai tag = 2 (index thua tag content + note thuong muon tag index)",
       C["index_tag"]["total"] == 2,
       [(i["file"], i["detail"]) for i in C["index_tag"]["list"]])
-check("3b index sai tag chi dung 2 thu pham",
+check("3b index sai tag chi dung 2 thu pham (Indexing Chien Luoc KHONG bi bao oan - audit W41)",
       {os.path.basename(i["file"]) for i in C["index_tag"]["list"]}
       == {"Index - Work.md", "Iota.md"},
       [i["file"] for i in C["index_tag"]["list"]])
@@ -367,9 +357,6 @@ check("3b ngoai le khai cho note khong con ton tai bi bao",
       any("Khong Con Nua" in i["detail"] for i in C["title"]["list"]),
       [i["detail"] for i in C["title"]["list"]])
 # --- 3 ca AUDIT DOC LAP W41 (27/07) ---
-check("3c ten bat dau 'Index' nhung khong phai index KHONG bi doi bo tag (bao oan)",
-      all("Indexing" not in i["file"] for i in C["index_tag"]["list"]),
-      [i["file"] for i in C["index_tag"]["list"]])
 check("3c note gate_ignore vi pham ca 3 check moi van duoc MIEN",
       all("Mien Ca 3" not in i["file"]
           for k in ("tag", "index_tag", "title") for i in C[k]["list"]),
@@ -379,10 +366,6 @@ check("3c ngoai le khai HONG (thieu title) duoc noi thang, khong so voi chuoi ro
       T.get("Khai Hong.md"))
 check("3b tong so van de = 18", rep["problems"] == 18,
       {c["id"]: c["total"] for c in rep["checks"]})
-
-check("3c wikilink trong bang `[[Note\\|alias]]` KHONG bi bao gay (bao oan, audit W41)",
-      all("Bang" not in i["file"] for i in C["link"]["list"]),
-      [(i["file"], i["target"]) for i in C["link"]["list"]])
 
 # --- thieu nguon luat: contract TAT em, cau truc van chay ---
 rep2 = ITG.collect(vault=VAULT_DIR, rules_dir=EMPTY_RULES, use_cache=False)
@@ -415,7 +398,11 @@ check("4c parser du phong dem RA CUNG KET QUA voi parser cua vault",
       {k: C4[k]["total"] for k in ("frontmatter", "digest", "tag", "index_tag", "title")}
       == {k: C[k]["total"] for k in ("frontmatter", "digest", "tag", "index_tag", "title")},
       {"du phong": {k: C4[k]["total"] for k in C4}, "that": {k: C[k]["total"] for k in C}})
-check("4c rules.parser noi ro dang dung parser nao", rep4["rules"].get("parser"), rep4["rules"])
+# UI/bao cao doc `parser` de noi dang do bang parser nao: phai ghi DUNG ten, ca hai chieu.
+check("4c rules.parser noi dung parser dang dung (du phong vs vault_rules.py)",
+      (rep4["rules"].get("parser"), rep["rules"].get("parser"))
+      == (ITG.PARSER_BASIC, "vault_rules.py"),
+      (rep4["rules"].get("parser"), rep["rules"].get("parser")))
 
 # --- cache theo chu ky mtime ---
 a = ITG.collect(vault=VAULT_DIR, rules_dir=RULES_DIR)
@@ -441,10 +428,6 @@ check("6 is_index_note: khop token chu khong phai startswith tran",
        ITG.is_index_note("Ghi Chu", "index", "index", "index")) == (True, True, False, True))
 check("6 _title_problems im khi note THIEU han title (check frontmatter da bao roi)",
       ITG._title_problems({"stem": "X", "h1": None}, "", None, True) == [])
-check("6 _title_problems: khop du bo ba thi rong",
-      ITG._title_problems({"stem": "X", "h1": "X"}, "X", None, True) == [])
-check("6 build_integrity la ham thuan (now truyen vao)",
-      ITG.build_integrity(ITG.scan_vault(VAULT_DIR), now=123.0)["generated"] == 123.0)
 
 # --- W149: thieu PyYAML phai DEGRADE + exit 2, tuyet doi khong bao sach gia ---
 rules6, info6 = ITG.load_rules(RULES_DIR)

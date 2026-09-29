@@ -191,7 +191,7 @@ if ($result -eq [System.Windows.Forms.DialogResult]::OK) {
 """
 
 
-def foreground_window_handle(platform=None, user32=None):
+def foreground_window_handle(platform=None):
     """Return the current Windows foreground HWND, or 0 when unavailable.
 
     The HTTP request arrives while the user is still in the app window.  Capture its
@@ -202,12 +202,9 @@ def foreground_window_handle(platform=None, user32=None):
     if platform != "nt":
         return 0
     try:
-        if user32 is None:
-            import ctypes
-            fn = ctypes.windll.user32.GetForegroundWindow
-            fn.restype = ctypes.c_void_p
-        else:
-            fn = user32.GetForegroundWindow
+        import ctypes
+        fn = ctypes.windll.user32.GetForegroundWindow
+        fn.restype = ctypes.c_void_p
         hwnd = fn()
         return int(hwnd or 0)
     except (AttributeError, OSError, TypeError, ValueError):

@@ -64,8 +64,13 @@ norm = [os.path.normcase(p) for p in c]
 check("t4a co duong chuan", os.path.normcase(os.path.join(std, "activity.jsonl")) in norm, c)
 check("t4b glob bat package hash BAT KY (Claude_ZZTESTHASH)",
       os.path.normcase(os.path.join(msix, "activity.jsonl")) in norm, c)
+# Package moi xuat hien SAU lan quet dau: trong 30s cache KHONG duoc thay no — bo
+# cache (glob moi lan goi) thi lan goi 2 thay them duong nay va t4c do.
+msix2 = os.path.join(fake, "Packages", "Claude_ZZLATER", "LocalCache", "Local", "claude-graph3d")
+os.makedirs(msix2, exist_ok=True)
+open(os.path.join(msix2, "activity.jsonl"), "w").close()
 c2 = AP.activity_log_candidates()
-check("t4c cache tra cung ket qua", c2 == c)
+check("t4c cache 30s: package moi sau lan quet dau chua duoc thay", c2 == c, c2)
 
 # t5: Codex Desktop khong co Claude hook; doc rollout JSONL va chi phat event note
 # trong vault. Adapter TUYET DOI khong dua prompt/noi dung note vao event.
