@@ -82,6 +82,12 @@ try:
     check("P5.9d serve.py cut giua chung -> False", _cut("serve.py", 1000) is False)
     first_src = sorted(os.listdir(os.path.join(sane_dir, "src")))[0]
     check("P5.9e src/* rong -> False", _cut("src/" + first_src, 0) is False, first_src)
+    # W437: file rong thi seek(-1) nem loi nen P5.9e van False khi bo kiem byte cuoi.
+    # Cat GIUA mot dong (byte cuoi != \n) moi la ca OneDrive ghi do thuong gap.
+    raw_src = open(os.path.join(sane_dir, "src", first_src), "rb").read()
+    giua = next(i for i in range(len(raw_src) // 2, len(raw_src)) if raw_src[i - 1:i] != b"\n")
+    check("P5.9f src/* cut giua dong -> False", _cut("src/" + first_src, giua) is False,
+          (first_src, giua))
 finally:
     SV.HERE = real_here
     shutil.rmtree(sane_dir, ignore_errors=True)

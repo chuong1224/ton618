@@ -190,6 +190,20 @@ try:
     check("5 asset vault ngoai bi sandbox khong script", "sandbox" in asset_csp and
           "allow-scripts" not in asset_csp, asset_csp)
     check("5 asset co nosniff", asset_nosniff == "nosniff", asset_nosniff)
+    # W437: test_reader chi goi ham app_static_file — do_GET thoi goi no (UI trang tron)
+    # thi van xanh. Do qua server song: dung byte tren dia cua ca /src va /vendor.
+    tinh = {}
+    for url, rel in (("/src/main.js", ("src", "main.js")),
+                     ("/vendor/markdown-it.min.js", ("vendor", "markdown-it.min.js"))):
+        with open(os.path.join(G3D, *rel), "rb") as f:
+            tren_dia = f.read()
+        try:
+            with urllib.request.urlopen(base + url, timeout=8) as r:
+                tinh[url] = (r.status, r.read() == tren_dia)
+        except urllib.error.HTTPError as exc:
+            tinh[url] = (exc.code, False)
+    check("5 server phuc vu file tinh app /src + /vendor dung byte tren dia",
+          all(v == (200, True) for v in tinh.values()), tinh)
     try:
         urllib.request.urlopen(base + "/ping?type=read&file=Only%20External.md", timeout=5)
         ping_status = 200

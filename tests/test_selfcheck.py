@@ -299,6 +299,55 @@ for label, override in (("default", None), ("explicit", os.path.join(SCRATCH, "h
           probe.returncode == 0 and "isolated heat lock" in probe.stdout,
           (probe.stdout or "") + (probe.stderr or ""))
 
+# ---- I. W437: ma thoat THAT cua process selfcheck, khong chi ham tong_ket ----
+# Nhom E chi goi ham thuan, nen sua dong cuoi __main__ thanh `sys.exit(0)` van xanh
+# (do bang mutation 29/09). Chay CHINH selfcheck.py trong process con, tren mot cay
+# .graph3d gia: file app that chep sang (lop 1/2 do that), con tests/ la toy mang dung
+# ten UNIT_FILES — nen lop 3 khong goi lai test_selfcheck (khong de quy) va chay nhanh.
+# Moc vung phu tro vao scratch: KHONG duoc dung moc that cua may.
+import shutil
+cay = os.path.join(SCRATCH, "w437-cay")
+shutil.rmtree(cay, ignore_errors=True)
+g3d_gia = os.path.join(cay, ".graph3d")
+os.makedirs(os.path.join(g3d_gia, "tests"))
+shutil.copytree(SC.SRC, os.path.join(g3d_gia, "src"))
+for ten in os.listdir(SC.G3D):
+    p = os.path.join(SC.G3D, ten)
+    if os.path.isfile(p) and (ten.endswith(".py") or ten in ("index.html", "Start-Graph3D.bat")) \
+            and ten not in SC.PRIVATE_ONLY:
+        shutil.copyfile(p, os.path.join(g3d_gia, ten))
+for ten in ("selfcheck.py", "_scratch.py"):
+    shutil.copyfile(os.path.join(SC.TESTS, ten), os.path.join(g3d_gia, "tests", ten))
+
+
+def chay_selfcheck_gia(bo_do):
+    """Toy xanh cho moi bo cua lop 3, rieng `bo_do` thi exit 1. Tra (ma thoat, output)."""
+    for ten in SC.UNIT_FILES + SC.SLOW_FILES:
+        # 2l doc test_p2.py: toy phai mang mau listener port 0 moi qua duoc contract do.
+        body = "# holder.bind((\"127.0.0.1\", 0))\nprint('PASS toy')\n"
+        if ten == bo_do:
+            body += "print('FAIL toy')\nraise SystemExit(1)\n"
+        with open(os.path.join(g3d_gia, "tests", ten), "w", encoding="utf-8", newline="\n") as f:
+            f.write(body)
+    env = dict(os.environ, PYTHONIOENCODING="utf-8", PYTHONDONTWRITEBYTECODE="1",
+               GRAPH3D_SELFCHECK_STATE=os.path.join(cay, "moc.json"))
+    r = subprocess.run([sys.executable, os.path.join(g3d_gia, "tests", "selfcheck.py")],
+                       cwd=os.path.join(g3d_gia, "tests"), env=env, capture_output=True,
+                       encoding="utf-8", errors="replace", timeout=120)
+    return r.returncode, r.stdout + r.stderr
+
+
+# Chi ca DO: chieu xanh -> 0 da do chinh lan selfcheck that gac (sai la moi phien thay
+# exit 1 ngay), con moi lan chay cay gia ton ~8s.
+try:
+    i_do = chay_selfcheck_gia(SC.UNIT_FILES[0])
+finally:
+    shutil.rmtree(cay, ignore_errors=True)
+# Phai di toi TONG KET: exit 1 vi crash giua chung thi van xanh voi mutation `exit(0)`.
+check("I1 selfcheck that: mot bo do -> process exit 1 (khong chi chuoi TONG KET)",
+      i_do[0] == 1 and "TONG KET selfcheck" in i_do[1] and "FAIL 1 muc" in i_do[1],
+      (i_do[0], i_do[1][-1500:]))
+
 print("\nTONG KET test_selfcheck: %s" % (
     ("FAIL %d: %s" % (len(fails), ", ".join(fails))) if fails else "ALL PASS"))
 sys.exit(1 if fails else 0)
