@@ -73,6 +73,6 @@
     <text x="909" y="406" font-size="12.5" fill="#8d83bb">Python stdlib + vanilla ES</text>
     <text x="909" y="424" font-size="12.5" fill="#8d83bb">modules + vendored three.js —</text>
     <text x="909" y="442" font-size="12.5" fill="#8d83bb">no pip, no npm, no build step ·</text>
-    <text x="909" y="460" font-size="12.5" fill="#8d83bb">tests run in ~3 seconds</text>
+    <text x="909" y="460" font-size="12.5" fill="#8d83bb">tests run in under 2 minutes</text>
   </g>
 </svg>
