@@ -36,6 +36,15 @@ function gateText(d) {
     .map(g => (DB.gates[g] || {}).desc || g).join(' · ');
 }
 
+/* Máy bắt buộc (gate kind=host) — có trên mọi máy, kể cả máy đang ngồi: blocking_gates
+   bỏ qua gate khớp máy hiện tại nên trước W480 ngồi đúng máy thì thẻ không nói gì.
+   Registry cũ không có `machine` thì thẻ giữ nguyên như trước. */
+function machineHtml(d) {
+  return (d.machine || []).map(m =>
+    `<span class="wm-m${m.here ? ' here' : ''}" title="${esc(m.desc || m.host || '')}">🖥 ${esc(m.label || m.host)}</span>`
+  ).join('');
+}
+
 function nodeHtml(d) {
   const bits = [];
   if (d.unblocks) bits.push(tr('work.unblocks', { n: d.unblocks }));
@@ -52,6 +61,7 @@ function nodeHtml(d) {
     <span class="wm-code">${esc(d.code || '—')}</span>
     <span class="wm-p">${esc(d.priority || 'P?')}</span>
     <span class="wm-p wm-agent" title="Agent">${esc(agent)}</span>
+    ${machineHtml(d)}
     <span class="wm-t">${esc(d.title)}</span>
     ${d.unblocks ? `<span class="wm-u" title="${tr('work.unblocks.tip', { n: d.unblocks })}">⛓${d.unblocks}</span>` : ''}
   </button>`;

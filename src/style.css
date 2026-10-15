@@ -796,6 +796,10 @@ select#ck-day:focus { border-color: var(--cyan); }
   color: var(--faint); }
 .wm-node .wm-t { flex: 1; min-width: 0; overflow-wrap: anywhere; white-space: normal; line-height: 1.5; }
 .wm-node .wm-u { flex: none; font-size: 9.5px; color: var(--yellow); }
+/* W480 · máy bắt buộc: vàng = máy kia, xanh = đúng máy đang ngồi */
+.wm-node .wm-m { flex: none; font-size: 9.5px; font-weight: 700; padding: 1px 6px; border-radius: 6px;
+  color: var(--yellow); border: 1px solid rgba(249,248,113,.45); white-space: nowrap; }
+.wm-node .wm-m.here { color: var(--cyan); border-color: rgba(4,217,255,.55); }
 .wm-node.b-ready { border-color: rgba(4,217,255,.55); box-shadow: 0 0 10px rgba(4,217,255,.10); }
 .wm-node.b-ready .wm-p { color: var(--cyan); }
 .wm-node.b-waiting_dep { border-color: rgba(245,158,11,.45); }
